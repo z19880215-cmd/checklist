@@ -8,15 +8,7 @@
 <script src="https://accounts.google.com/gsi/client" async></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
-  :root {
-    --black:#111111; --white:#FAFAF8; --gray-100:#F2F1EE;
-    --gray-200:#E0DED9; --gray-400:#A8A49D; --gray-600:#6B6760;
-    --orange:#E8561F; --orange-light:#FEF0EA;
-    --green:#1A7F5A; --green-light:#EAF7F1;
-    --red:#C0392B; --red-light:#FDEEEC;
-    --yellow:#E8A020; --yellow-light:#FEF6E7;
-    --radius:14px; --radius-sm:8px;
-  }
+  :root{--black:#111111;--white:#FAFAF8;--gray-100:#F2F1EE;--gray-200:#E0DED9;--gray-400:#A8A49D;--gray-600:#6B6760;--orange:#E8561F;--orange-light:#FEF0EA;--green:#1A7F5A;--green-light:#EAF7F1;--red:#C0392B;--red-light:#FDEEEC;--yellow:#E8A020;--yellow-light:#FEF6E7;--radius:14px;--radius-sm:8px;}
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
   body{font-family:'Noto Sans TC',sans-serif;background:var(--gray-100);color:var(--black);min-height:100vh;max-width:480px;margin:0 auto;}
   .login-screen{min-height:100vh;background:var(--black);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 32px;text-align:center;}
@@ -65,15 +57,14 @@
   .step-review-item.rejected-step .step-review-num{background:var(--red);color:var(--white);}
   .step-review-item.ok-step .step-review-num{background:var(--green);color:var(--white);}
   .step-review-name{flex:1;font-size:13px;font-weight:700;}
-  .step-toggle-btn{padding:5px 12px;border-radius:20px;border:none;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;}
-  .step-toggle-btn.mark-reject{background:var(--red-light);color:var(--red);}
-  .step-toggle-btn.mark-ok{background:var(--green-light);color:var(--green);}
+  .step-toggle-btn{padding:7px 14px;border-radius:20px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;border:none;}
+  .mark-reject{background:var(--red);color:var(--white);}
+  .mark-ok{background:var(--green);color:var(--white);}
   .step-photo-wrap{padding:10px 14px;}
   .step-photo{width:100%;max-height:200px;object-fit:cover;border-radius:var(--radius-sm);display:block;cursor:pointer;}
   .step-photo-placeholder{width:100%;height:80px;background:var(--gray-100);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;color:var(--gray-400);font-size:13px;}
-  .action-row{display:flex;gap:8px;align-items:center;}
+  .action-row{display:flex;gap:8px;align-items:center;margin-top:4px;}
   .remark-input{flex:1;padding:10px 14px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;background:var(--gray-100);color:var(--black);outline:none;}
-  .remark-input:focus{border-color:var(--orange);background:var(--white);}
   .approve-btn{padding:10px 18px;background:var(--green);color:var(--white);border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;}
   .reject-btn{padding:10px 18px;background:var(--white);color:var(--red);border:2px solid var(--red);border-radius:var(--radius-sm);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;}
   .already-done{font-size:12px;font-weight:700;padding:8px 0;}
@@ -101,10 +92,7 @@
 <div id="main-screen" style="display:none;">
   <div class="mgr-header">
     <div class="mgr-header-row">
-      <div>
-        <div class="mgr-title">主管審核</div>
-        <div class="mgr-sub" id="mgr-date"></div>
-      </div>
+      <div><div class="mgr-title">主管審核</div><div class="mgr-sub" id="mgr-date"></div></div>
       <button class="refresh-btn" onclick="loadRecords()">↻ 重新整理</button>
     </div>
   </div>
@@ -147,7 +135,7 @@ function initGoogleAuth() {
       document.getElementById('main-screen').style.display = 'block';
       const d = new Date();
       document.getElementById('mgr-date').textContent =
-        `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} 審核總覽`;
+        d.getFullYear() + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0') + ' 審核總覽';
       loadRecords();
     },
   });
@@ -173,7 +161,7 @@ async function loadRecords() {
     pendingStepStatus = {};
     renderAll();
   } catch(e) {
-    showToast('載入失敗，請重試');
+    showToast('載入失敗');
     document.getElementById('cards-list').innerHTML = '<div class="empty-state">載入失敗，請重新整理</div>';
   }
 }
@@ -189,16 +177,14 @@ function formatTime(t) {
   if (!t) return '';
   if (t.includes('/') || t.includes('上午') || t.includes('下午')) return t;
   try {
-    const d = new Date(t);
-    return d.toLocaleString('zh-TW', { timeZone: 'Asia/Taipei',
-      month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+    return new Date(t).toLocaleString('zh-TW', {timeZone:'Asia/Taipei', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit'});
   } catch(e) { return t; }
 }
 
 function fixDriveUrl(url) {
   if (!url) return '';
   const match = url.match(/id=([^&]+)/);
-  if (match) return `https://lh3.googleusercontent.com/d/${match[1]}`;
+  if (match) return 'https://lh3.googleusercontent.com/d/' + match[1];
   return url;
 }
 
@@ -207,54 +193,73 @@ function renderAll() {
   document.getElementById('stat-pending').textContent = records.filter(r => r.status === 'pending').length;
   document.getElementById('stat-approved').textContent = records.filter(r => r.status === 'approved').length;
   document.getElementById('stat-rejected').textContent = records.filter(r => r.status === 'rejected').length;
-  if (filtered.length === 0) {
-    document.getElementById('cards-list').innerHTML = '<div class="empty-state">沒有紀錄</div>';
-    return;
-  }
-  document.getElementById('cards-list').innerHTML = filtered.map(r => renderCard(r)).join('');
+  document.getElementById('cards-list').innerHTML = filtered.length === 0
+    ? '<div class="empty-state">沒有紀錄</div>'
+    : filtered.map(r => renderCard(r)).join('');
 }
 
 function renderCard(r) {
   const expanded = r._expanded || false;
   const statusText = r.status === 'pending' ? '待審核' : r.status === 'approved' ? '已核准' : '已退回';
   const stepStatus = pendingStepStatus[r.id] || r.stepStatus || [];
+
   const stepsHtml = (r.stepNames || []).map((name, i) => {
     const isRejected = stepStatus[i] === 'rejected';
-    const rawUrl = (r.photoUrls || [])[i];
-    const photoUrl = fixDriveUrl(rawUrl);
-    return `<div class="step-review-item ${isRejected ? 'rejected-step' : 'ok-step'}">
-      <div class="step-review-header">
-        <div class="step-review-num">${isRejected ? '✕' : '✓'}</div>
-        <div class="step-review-name">${name}</div>
-        ${r.status !== 'approved' ? `<button class="step-toggle-btn ${isRejected ? 'mark-ok' : 'mark-reject'}" onclick="toggleStep('${r.id}',${i})">${isRejected ? '恢復正常' : '標記退回'}</button>` : ''}
-      </div>
-      <div class="step-photo-wrap">
-        ${photoUrl ? `<img class="step-photo" src="${photoUrl}" onclick="openLightbox('${photoUrl}')" loading="lazy" referrerpolicy="no-referrer">` : `<div class="step-photo-placeholder">尚無照片</div>`}
-      </div>
-    </div>`;
+    const photoUrl = fixDriveUrl((r.photoUrls || [])[i]);
+    const btnHtml = r.status !== 'approved'
+      ? '<button class="step-toggle-btn ' + (isRejected ? 'mark-ok' : 'mark-reject') + '" data-rid="' + r.id + '" data-idx="' + i + '">' + (isRejected ? '恢復正常' : '標記退回') + '</button>'
+      : '';
+    const imgHtml = photoUrl
+      ? '<img class="step-photo" src="' + photoUrl + '" data-url="' + photoUrl + '" loading="lazy" referrerpolicy="no-referrer">'
+      : '<div class="step-photo-placeholder">尚無照片</div>';
+    return '<div class="step-review-item ' + (isRejected ? 'rejected-step' : 'ok-step') + '">'
+      + '<div class="step-review-header">'
+      + '<div class="step-review-num">' + (isRejected ? '✕' : '✓') + '</div>'
+      + '<div class="step-review-name">' + name + '</div>'
+      + btnHtml
+      + '</div>'
+      + '<div class="step-photo-wrap">' + imgHtml + '</div>'
+      + '</div>';
   }).join('');
+
   const actionsHtml = r.status === 'approved'
-    ? `<div class="already-done" style="color:var(--green);">✓ 已核准</div>`
+    ? '<div class="already-done" style="color:var(--green);">✓ 已核准</div>'
     : r.status === 'rejected'
-    ? `<div class="already-done" style="color:var(--red);">已退回補件中</div>`
-    : `<div class="action-row">
-        <input class="remark-input" id="remark-${r.id}" placeholder="退回備註（選填）">
-        <button class="reject-btn" onclick="doReject('${r.id}')">退回</button>
-        <button class="approve-btn" onclick="doApprove('${r.id}')">核准</button>
-      </div>`;
-  return `<div class="sub-card ${r.status}" id="card-${r.id}">
-    <div class="sub-card-header ${expanded ? 'expanded' : ''}" onclick="toggleCard('${r.id}')">
-      <div class="store-badge">${r.storeId}</div>
-      <div class="sub-info">
-        <div class="sub-info-main">${r.storeName} · ${r.modeLabel}</div>
-        <div class="sub-info-sub">${r.staff} · ${formatTime(r.createdAt)}</div>
-      </div>
-      <span class="status-pill ${r.status}">${statusText}</span>
-      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="#A8A49D" stroke-width="2" width="18" height="18"><path d="M6 9l6 6 6-6"/></svg>
-    </div>
-    ${expanded ? `<div class="sub-card-body"><div class="steps-review">${stepsHtml}</div>${actionsHtml}</div>` : ''}
-  </div>`;
+    ? '<div class="already-done" style="color:var(--red);">已退回補件中</div>'
+    : '<div class="action-row">'
+      + '<input class="remark-input" id="remark-' + r.id + '" placeholder="退回備註（選填）">'
+      + '<button class="reject-btn" data-action="reject" data-rid="' + r.id + '">退回</button>'
+      + '<button class="approve-btn" data-action="approve" data-rid="' + r.id + '">核准</button>'
+      + '</div>';
+
+  return '<div class="sub-card ' + r.status + '" id="card-' + r.id + '">'
+    + '<div class="sub-card-header ' + (expanded ? 'expanded' : '') + '" data-action="toggle" data-rid="' + r.id + '">'
+    + '<div class="store-badge">' + r.storeId + '</div>'
+    + '<div class="sub-info"><div class="sub-info-main">' + r.storeName + ' · ' + r.modeLabel + '</div>'
+    + '<div class="sub-info-sub">' + r.staff + ' · ' + formatTime(r.createdAt) + '</div></div>'
+    + '<span class="status-pill ' + r.status + '">' + statusText + '</span>'
+    + '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="#A8A49D" stroke-width="2" width="18" height="18"><path d="M6 9l6 6 6-6"/></svg>'
+    + '</div>'
+    + (expanded ? '<div class="sub-card-body"><div class="steps-review">' + stepsHtml + '</div>' + actionsHtml + '</div>' : '')
+    + '</div>';
 }
+
+// 統一事件處理
+document.addEventListener('click', function(e) {
+  const toggleBtn = e.target.closest('.step-toggle-btn');
+  if (toggleBtn) {
+    toggleStep(toggleBtn.dataset.rid, parseInt(toggleBtn.dataset.idx));
+    return;
+  }
+  const photo = e.target.closest('.step-photo');
+  if (photo) { openLightbox(photo.dataset.url); return; }
+  const header = e.target.closest('[data-action="toggle"]');
+  if (header) { toggleCard(header.dataset.rid); return; }
+  const approveBtn = e.target.closest('[data-action="approve"]');
+  if (approveBtn) { doApprove(approveBtn.dataset.rid); return; }
+  const rejectBtn = e.target.closest('[data-action="reject"]');
+  if (rejectBtn) { doReject(rejectBtn.dataset.rid); return; }
+});
 
 function toggleCard(id) {
   const r = records.find(r => String(r.id) === String(id));
@@ -264,17 +269,17 @@ function toggleCard(id) {
 
 function toggleStep(recordId, stepIdx) {
   if (!pendingStepStatus[recordId]) {
-    const r = records.find(r => r.id === recordId);
-    pendingStepStatus[recordId] = [...(r.stepStatus || r.stepNames.map(() => 'ok'))];
+    const r = records.find(r => String(r.id) === String(recordId));
+    pendingStepStatus[recordId] = (r.stepStatus && r.stepStatus.length) ? [...r.stepStatus] : (r.stepNames || []).map(() => 'ok');
   }
-  const current = pendingStepStatus[recordId][stepIdx];
-  pendingStepStatus[recordId][stepIdx] = current === 'rejected' ? 'ok' : 'rejected';
+  const cur = pendingStepStatus[recordId][stepIdx];
+  pendingStepStatus[recordId][stepIdx] = cur === 'rejected' ? 'ok' : 'rejected';
   renderAll();
 }
 
 async function doApprove(id) {
   try {
-    await fetch(GAS_URL, { method:'POST', body: JSON.stringify({ action:'updateStatus', id, status:'approved', remark:'' }) });
+    await fetch(GAS_URL, {method:'POST', body: JSON.stringify({action:'updateStatus', id, status:'approved', remark:''})});
     const r = records.find(r => String(r.id) === String(id));
     if (r) { r.status = 'approved'; r._expanded = false; }
     showToast('已核准');
@@ -284,11 +289,10 @@ async function doApprove(id) {
 
 async function doReject(id) {
   const stepStatus = pendingStepStatus[id] || [];
-  const hasRejected = stepStatus.some(s => s === 'rejected');
-  if (!hasRejected) { showToast('請先標記哪幾個步驟需要退回'); return; }
-  const remark = document.getElementById('remark-' + id)?.value || '';
+  if (!stepStatus.some(s => s === 'rejected')) { showToast('請先標記哪幾個步驟需要退回'); return; }
+  const remark = document.getElementById('remark-' + id) ? document.getElementById('remark-' + id).value : '';
   try {
-    await fetch(GAS_URL, { method:'POST', body: JSON.stringify({ action:'rejectSteps', id, stepStatus, remark }) });
+    await fetch(GAS_URL, {method:'POST', body: JSON.stringify({action:'rejectSteps', id, stepStatus, remark})});
     const r = records.find(r => String(r.id) === String(id));
     if (r) { r.status = 'rejected'; r.stepStatus = stepStatus; r._expanded = false; }
     delete pendingStepStatus[id];
