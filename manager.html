@@ -195,6 +195,13 @@ function formatTime(t) {
   } catch(e) { return t; }
 }
 
+function fixDriveUrl(url) {
+  if (!url) return '';
+  const match = url.match(/id=([^&]+)/);
+  if (match) return `https://lh3.googleusercontent.com/d/${match[1]}`;
+  return url;
+}
+
 function renderAll() {
   const filtered = filter === 'all' ? records : records.filter(r => r.status === filter);
   document.getElementById('stat-pending').textContent = records.filter(r => r.status === 'pending').length;
@@ -213,9 +220,8 @@ function renderCard(r) {
   const stepStatus = pendingStepStatus[r.id] || r.stepStatus || [];
   const stepsHtml = (r.stepNames || []).map((name, i) => {
     const isRejected = stepStatus[i] === 'rejected';
-    const photoUrl = (r.photoUrls || [])[i];
-    ep-review-num">${isRejected ? '✕' : '✓'}</div>
-const displayUrl = photoUrl ? photoUrl.replace('uc?export=view&id=', 'thumbnail?id=').replace('uc?export=view&amp;id=', 'thumbnail?id=') + '&sz=w400' : '';
+    const rawUrl = (r.photoUrls || [])[i];
+    const photoUrl = fixDriveUrl(rawUrl);
     return `<div class="step-review-item ${isRejected ? 'rejected-step' : 'ok-step'}">
       <div class="step-review-header">
         <div class="step-review-num">${isRejected ? '✕' : '✓'}</div>
@@ -223,7 +229,7 @@ const displayUrl = photoUrl ? photoUrl.replace('uc?export=view&id=', 'thumbnail?
         ${r.status !== 'approved' ? `<button class="step-toggle-btn ${isRejected ? 'mark-ok' : 'mark-reject'}" onclick="toggleStep('${r.id}',${i})">${isRejected ? '恢復正常' : '標記退回'}</button>` : ''}
       </div>
       <div class="step-photo-wrap">
-        ${displayUrl ? `<img class="step-photo" src="${displayUrl}" onclick="openLightbox('${displayUrl}')" loading="lazy" referrerpolicy="no-referrer">` : `<div class="step-photo-placeholder">尚無照片</div>`}
+        ${photoUrl ? `<img class="step-photo" src="${photoUrl}" onclick="openLightbox('${photoUrl}')" loading="lazy" referrerpolicy="no-referrer">` : `<div class="step-photo-placeholder">尚無照片</div>`}
       </div>
     </div>`;
   }).join('');
