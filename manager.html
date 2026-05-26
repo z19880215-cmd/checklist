@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#111111">
+<title>薯條 主管審核</title>
+<script src="https://accounts.google.com/gsi/client" async></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+  :root {
+    --black:#111111; --white:#FAFAF8; --gray-100:#F2F1EE;
+    --gray-200:#E0DED9; --gray-400:#A8A49D; --gray-600:#6B6760;
+    --orange:#E8561F; --orange-light:#FEF0EA;
+    --green:#1A7F5A; --green-light:#EAF7F1;
+    --red:#C0392B; --red-light:#FDEEEC;
+    --yellow:#E8A020; --yellow-light:#FEF6E7;
+    --radius:14px; --radius-sm:8px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{font-family:'Noto Sans TC',sans-serif;background:var(--gray-100);color:var(--black);min-height:100vh;max-width:480px;margin:0 auto;}
+
+  /* LOGIN */
+  .login-screen{min-height:100vh;background:var(--black);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 32px;text-align:center;}
+  .login-dot{width:48px;height:48px;border-radius:50%;background:var(--orange);margin:0 auto 24px;}
+  .login-title{color:var(--white);font-size:22px;font-weight:700;margin-bottom:8px;}
+  .login-sub{color:var(--gray-400);font-size:14px;margin-bottom:40px;}
+  .google-login-btn{display:inline-flex;align-items:center;gap:10px;background:var(--white);color:var(--black);border:none;border-radius:var(--radius);padding:14px 24px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;}
+
+  /* HEADER */
+  .mgr-header{background:var(--white);padding:52px 24px 20px;border-bottom:1px solid var(--gray-200);}
+  .mgr-header-row{display:flex;align-items:flex-start;justify-content:space-between;}
+  .mgr-title{font-size:22px;font-weight:700;}
+  .mgr-sub{font-size:13px;color:var(--gray-600);margin-top:3px;}
+  .refresh-btn{background:var(--gray-100);border:none;border-radius:var(--radius-sm);padding:8px 14px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;color:var(--gray-600);}
+
+  /* STATS */
+  .stats-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:16px;}
+  .stat-card{background:var(--white);border-radius:var(--radius-sm);padding:14px 12px;text-align:center;}
+  .stat-num{font-size:24px;font-weight:700;}
+  .stat-num.orange{color:var(--orange);}
+  .stat-num.green{color:var(--green);}
+  .stat-num.red{color:var(--red);}
+  .stat-lbl{font-size:11px;color:var(--gray-600);margin-top:2px;}
+
+  /* FILTER */
+  .filter-bar{display:flex;gap:8px;padding:0 16px 12px;overflow-x:auto;}
+  .filter-btn{flex-shrink:0;padding:7px 16px;border-radius:20px;border:1.5px solid var(--gray-200);background:var(--white);font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;color:var(--gray-600);}
+  .filter-btn.active{background:var(--black);border-color:var(--black);color:var(--white);}
+
+  /* CARDS */
+  .cards-list{padding:0 16px 32px;display:flex;flex-direction:column;gap:10px;}
+  .sub-card{background:var(--white);border-radius:var(--radius);overflow:hidden;border:2px solid transparent;}
+  .sub-card.pending{border-color:var(--yellow);}
+  .sub-card.approved{border-color:var(--green);}
+  .sub-card.rejected{border-color:var(--red);}
+
+  .sub-card-header{display:flex;align-items:center;gap:12px;padding:16px 18px;cursor:pointer;}
+  .store-badge{background:var(--black);color:var(--white);font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;}
+  .sub-info{flex:1;}
+  .sub-info-main{font-size:14px;font-weight:700;}
+  .sub-info-sub{font-size:12px;color:var(--gray-600);margin-top:1px;}
+  .status-pill{font-size:11px;font-weight:700;padding:5px 12px;border-radius:20px;}
+  .status-pill.pending{background:var(--yellow-light);color:var(--yellow);}
+  .status-pill.approved{background:var(--green-light);color:var(--green);}
+  .status-pill.rejected{background:var(--red-light);color:var(--red);}
+  .chev{transition:transform 0.2s;flex-shrink:0;}
+  .expanded .chev{transform:rotate(180deg);}
+
+  .sub-card-body{padding:16px 18px;}
+
+  /* PHOTO GRID */
+  .steps-review{display:flex;flex-direction:column;gap:12px;margin-bottom:16px;}
+  .step-review-item{border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);overflow:hidden;}
+  .step-review-item.rejected-step{border-color:var(--red);}
+  .step-review-item.ok-step{border-color:var(--green);}
+  .step-review-header{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--gray-100);}
+  .step-review-num{width:24px;height:24px;border-radius:50%;background:var(--gray-200);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+  .step-review-item.rejected-step .step-review-num{background:var(--red);color:var(--white);}
+  .step-review-item.ok-step .step-review-num{background:var(--green);color:var(--white);}
+  .step-review-name{flex:1;font-size:13px;font-weight:700;}
+  .step-toggle-btn{padding:5px 12px;border-radius:20px;border:none;font-size:11px;font-weight:700;font-family:inherit;cursor:pointer;}
+  .step-toggle-btn.mark-reject{background:var(--red-light);color:var(--red);}
+  .step-toggle-btn.mark-ok{background:var(--green-light);color:var(--green);}
+
+  .step-photo-wrap{padding:10px 14px;}
+  .step-photo{width:100%;max-height:200px;object-fit:cover;border-radius:var(--radius-sm);display:block;cursor:pointer;}
+  .step-photo-placeholder{width:100%;height:80px;background:var(--gray-100);border-radius:var(--radius-sm);display:flex;align-items:center;justify-content:center;color:var(--gray-400);font-size:13px;}
+
+  /* ACTION ROW */
+  .action-row{display:flex;gap:8px;align-items:center;}
+  .remark-input{flex:1;padding:10px 14px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;background:var(--gray-100);color:var(--black);outline:none;}
+  .remark-input:focus{border-color:var(--orange);background:var(--white);}
+  .approve-btn{padding:10px 18px;background:var(--green);color:var(--white);border:none;border-radius:var(--radius-sm);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;}
+  .reject-btn{padding:10px 18px;background:var(--white);color:var(--red);border:2px solid var(--red);border-radius:var(--radius-sm);font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;}
+  .already-done{font-size:12px;font-weight:700;padding:8px 0;}
+
+  /* LIGHTBOX */
+  .lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:100;align-items:center;justify-content:center;}
+  .lightbox.open{display:flex;}
+  .lightbox img{max-width:95%;max-height:90vh;object-fit:contain;border-radius:var(--radius-sm);}
+  .lb-close{position:absolute;top:20px;right:20px;background:rgba(255,255,255,0.2);border:none;color:white;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+
+  /* TOAST */
+  .toast{position:fixed;bottom:32px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--black);color:var(--white);padding:12px 24px;border-radius:100px;font-size:13px;font-weight:500;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1);z-index:999;white-space:nowrap;}
+  .toast.show{transform:translateX(-50%) translateY(0);}
+
+  .empty-state{padding:48px 24px;text-align:center;color:var(--gray-400);font-size:14px;}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen" class="login-screen">
+  <div class="login-dot"></div>
+  <div class="login-title">薯條 主管審核</div>
+  <div class="login-sub">請登入 Google 帳號繼續</div>
+  <button class="google-login-btn" onclick="requestLogin()">
+    <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+    使用 Google 帳號登入
+  </button>
+</div>
+
+<!-- MAIN -->
+<div id="main-screen" style="display:none;">
+  <div class="mgr-header">
+    <div class="mgr-header-row">
+      <div>
+        <div class="mgr-title">主管審核</div>
+        <div class="mgr-sub" id="mgr-date"></div>
+      </div>
+      <button class="refresh-btn" onclick="loadRecords()">↻ 重新整理</button>
+    </div>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-card"><div class="stat-num orange" id="stat-pending">0</div><div class="stat-lbl">待審核</div></div>
+    <div class="stat-card"><div class="stat-num green" id="stat-approved">0</div><div class="stat-lbl">已核准</div></div>
+    <div class="stat-card"><div class="stat-num red" id="stat-rejected">0</div><div class="stat-lbl">已退回</div></div>
+  </div>
+
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="setFilter('all',this)">全部</button>
+    <button class="filter-btn" onclick="setFilter('pending',this)">待審核</button>
+    <button class="filter-btn" onclick="setFilter('rejected',this)">已退回</button>
+    <button class="filter-btn" onclick="setFilter('approved',this)">已核准</button>
+  </div>
+
+  <div class="cards-list" id="cards-list"></div>
+</div>
+
+<!-- LIGHTBOX -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <button class="lb-close" onclick="closeLightbox()">✕</button>
+  <img id="lb-img" src="" alt="">
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbwPQCJEn2W4S-LeL334ZJa8hnBvq3rbEhIzzaeNTYrEBWOjusd4lFicJ1b1MmB6roG38A/exec';
+const CLIENT_ID = '448769511635-rpi3t0vtbqn104d2eut76aq1uqdvataq.apps.googleusercontent.com';
+
+let accessToken = null;
+let records = [];
+let filter = 'all';
+// 記錄每筆的步驟標記狀態（暫存，送出才寫回）
+let pendingStepStatus = {};
+
+// ── AUTH ──
+function initGoogleAuth() {
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: 'https://www.googleapis.com/auth/userinfo.profile',
+    callback: (resp) => {
+      if (resp.error) { showToast('登入失敗'); return; }
+      accessToken = resp.access_token;
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('main-screen').style.display = 'block';
+      const d = new Date();
+      document.getElementById('mgr-date').textContent =
+        `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} 審核總覽`;
+      loadRecords();
+    },
+  });
+  window._tokenClient = client;
+}
+
+function requestLogin() {
+  if (window._tokenClient) window._tokenClient.requestAccessToken();
+}
+
+window.addEventListener('load', () => {
+  if (window.google) initGoogleAuth();
+  else document.querySelector('script[src*="gsi"]').addEventListener('load', initGoogleAuth);
+});
+
+// ── LOAD ──
+async function loadRecords() {
+  document.getElementById('cards-list').innerHTML = '<div class="empty-state">載入中...</div>';
+  try {
+    const res = await fetch(GAS_URL + '?action=load');
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error);
+    records = json.records;
+    pendingStepStatus = {};
+    renderAll();
+  } catch(e) {
+    showToast('載入失敗，請重試');
+    document.getElementById('cards-list').innerHTML = '<div class="empty-state">載入失敗，請重新整理</div>';
+  }
+}
+
+// ── FILTER ──
+function setFilter(f, el) {
+  filter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderAll();
+}
+
+// ── RENDER ──
+function renderAll() {
+  const filtered = filter === 'all' ? records : records.filter(r => r.status === filter);
+  const pending = records.filter(r => r.status === 'pending').length;
+  const approved = records.filter(r => r.status === 'approved').length;
+  const rejected = records.filter(r => r.status === 'rejected').length;
+  document.getElementById('stat-pending').textContent = pending;
+  document.getElementById('stat-approved').textContent = approved;
+  document.getElementById('stat-rejected').textContent = rejected;
+
+  if (filtered.length === 0) {
+    document.getElementById('cards-list').innerHTML = '<div class="empty-state">沒有紀錄</div>';
+    return;
+  }
+  document.getElementById('cards-list').innerHTML = filtered.map(r => renderCard(r)).join('');
+}
+
+function renderCard(r) {
+  const expanded = r._expanded || false;
+  const statusText = r.status === 'pending' ? '待審核' : r.status === 'approved' ? '已核准' : '已退回';
+  const stepStatus = pendingStepStatus[r.id] || r.stepStatus || [];
+
+  const stepsHtml = (r.stepNames || []).map((name, i) => {
+    const isRejected = stepStatus[i] === 'rejected';
+    const photoUrl = (r.photoUrls || [])[i];
+    return `
+    <div class="step-review-item ${isRejected ? 'rejected-step' : 'ok-step'}" id="step-${r.id}-${i}">
+      <div class="step-review-header">
+        <div class="step-review-num">${isRejected ? '✕' : '✓'}</div>
+        <div class="step-review-name">${name}</div>
+        ${r.status !== 'approved' ? `<button class="step-toggle-btn ${isRejected ? 'mark-ok' : 'mark-reject'}"
+          onclick="toggleStep('${r.id}',${i})">${isRejected ? '恢復正常' : '標記退回'}</button>` : ''}
+      </div>
+      <div class="step-photo-wrap">
+        ${photoUrl
+          ? `<img class="step-photo" src="${photoUrl}" alt="${name}" onclick="openLightbox('${photoUrl}')" loading="lazy">`
+          : `<div class="step-photo-placeholder">尚無照片</div>`}
+      </div>
+    </div>`;
+  }).join('');
+
+  const actionsHtml = r.status === 'approved'
+    ? `<div class="already-done" style="color:var(--green);">✓ 已核准</div>`
+    : r.status === 'rejected'
+    ? `<div class="already-done" style="color:var(--red);">已退回補件中</div>`
+    : `<div class="action-row">
+        <input class="remark-input" id="remark-${r.id}" placeholder="退回備註（選填）">
+        <button class="reject-btn" onclick="doReject('${r.id}')">退回</button>
+        <button class="approve-btn" onclick="doApprove('${r.id}')">核准</button>
+      </div>`;
+
+  return `
+  <div class="sub-card ${r.status}" id="card-${r.id}">
+    <div class="sub-card-header ${expanded ? 'expanded' : ''}" onclick="toggleCard('${r.id}')">
+      <div class="store-badge">${r.storeId}</div>
+      <div class="sub-info">
+        <div class="sub-info-main">${r.storeName} · ${r.modeLabel}</div>
+        <div class="sub-info-sub">${r.staff} · ${r.createdAt}</div>
+      </div>
+      <span class="status-pill ${r.status}">${statusText}</span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="#A8A49D" stroke-width="2" width="18" height="18"><path d="M6 9l6 6 6-6"/></svg>
+    </div>
+    ${expanded ? `<div class="sub-card-body">
+      <div class="steps-review">${stepsHtml}</div>
+      ${actionsHtml}
+    </div>` : ''}
+  </div>`;
+}
+
+function toggleCard(id) {
+  const r = records.find(r => r.id === id);
+  if (r) r._expanded = !r._expanded;
+  renderAll();
+}
+
+// ── STEP TOGGLE ──
+function toggleStep(recordId, stepIdx) {
+  if (!pendingStepStatus[recordId]) {
+    const r = records.find(r => r.id === recordId);
+    pendingStepStatus[recordId] = [...(r.stepStatus || r.stepNames.map(() => 'ok'))];
+  }
+  const current = pendingStepStatus[recordId][stepIdx];
+  pendingStepStatus[recordId][stepIdx] = current === 'rejected' ? 'ok' : 'rejected';
+  renderAll();
+}
+
+// ── ACTIONS ──
+async function doApprove(id) {
+  try {
+    await fetch(GAS_URL, { method:'POST', body: JSON.stringify({ action:'updateStatus', id, status:'approved', remark:'' }) });
+    const r = records.find(r => r.id === id);
+    if (r) { r.status = 'approved'; r._expanded = false; }
+    showToast('已核准');
+    renderAll();
+  } catch(e) { showToast('操作失敗'); }
+}
+
+async function doReject(id) {
+  const stepStatus = pendingStepStatus[id] || [];
+  const hasRejected = stepStatus.some(s => s === 'rejected');
+  if (!hasRejected) { showToast('請先標記哪幾個步驟需要退回'); return; }
+
+  const remark = document.getElementById('remark-' + id)?.value || '';
+  try {
+    await fetch(GAS_URL, { method:'POST', body: JSON.stringify({
+      action: 'rejectSteps', id, stepStatus, remark
+    })});
+    const r = records.find(r => r.id === id);
+    if (r) { r.status = 'rejected'; r.stepStatus = stepStatus; r._expanded = false; }
+    delete pendingStepStatus[id];
+    showToast('已退回，員工將收到通知');
+    renderAll();
+  } catch(e) { showToast('操作失敗'); }
+}
+
+// ── LIGHTBOX ──
+function openLightbox(url) {
+  document.getElementById('lb-img').src = url;
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+</script>
+</body>
+</html>

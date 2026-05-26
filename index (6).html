@@ -1,0 +1,1423 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="theme-color" content="#111111">
+<title>薯條 開閉店確認</title>
+<link rel="manifest" href="manifest.json">
+<script src="https://accounts.google.com/gsi/client" async></script>
+<script>
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbwPQCJEn2W4S-LeL334ZJa8hnBvq3rbEhIzzaeNTYrEBWOjusd4lFicJ1b1MmB6roG38A/exec';
+  const CLIENT_ID = '448769511635-rpi3t0vtbqn104d2eut76aq1uqdvataq.apps.googleusercontent.com';
+  const DRIVE_FOLDER_ID = '1YknKvj8GKnU4JkKXoyP-w4ANMrX5q70l';
+  const SCOPES = 'https://www.googleapis.com/auth/drive.file';
+
+  let accessToken = null;
+  let currentUser = null;
+
+  // ── Google 登入初始化 ──
+  function initGoogleAuth() {
+    const tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: SCOPES,
+      callback: (resp) => {
+        if (resp.error) { showToast('登入失敗，請重試'); return; }
+        accessToken = resp.access_token;
+        // 取得使用者資訊
+        fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+          headers: { Authorization: 'Bearer ' + accessToken }
+        }).then(r => r.json()).then(info => {
+          currentUser = { name: info.name, email: info.email };
+          onLoginSuccess();
+        });
+      },
+    });
+    window._tokenClient = tokenClient;
+  }
+
+  function requestLogin() {
+    if (!window._tokenClient) { showToast('Google 登入初始化中，請稍候'); return; }
+    window._tokenClient.requestAccessToken();
+  }
+
+  function onLoginSuccess() {
+    const nameInput = document.getElementById('name-input');
+    if (nameInput && !nameInput.value) {
+      nameInput.value = currentUser.name;
+      state.staffName = currentUser.name;
+    }
+    document.getElementById('login-section').style.display = 'none';
+    document.getElementById('main-section').style.display = 'block';
+    checkReady();
+    window.firebaseReady = true;
+    // 檢查是否有退回補件
+    setTimeout(checkRejected, 500);
+  }
+
+  // ── 上傳照片到指定 Drive 資料夾 ──
+  async function uploadPhotoToDrive(file, fileName) {
+    // 建立 multipart body
+    const metadata = {
+      name: fileName,
+      parents: [DRIVE_FOLDER_ID],
+      mimeType: file.type || 'image/jpeg',
+    };
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', file);
+
+    const res = await fetch(
+      'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id',
+      {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + accessToken },
+        body: form,
+      }
+    );
+    const json = await res.json();
+    if (!json.id) throw new Error('Drive 上傳失敗');
+
+    // 設定任何人可以查看
+    await fetch(`https://www.googleapis.com/drive/v3/files/${json.id}/permissions`, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + accessToken,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ role: 'reader', type: 'anyone' }),
+    });
+
+    return 'https://drive.google.com/uc?export=view&id=' + json.id;
+  }
+
+  // ── 送出紀錄 ──
+  window.fbSubmitRecord = async function(recordData, photoFiles) {
+    const store = STORES.find(s => s.id === recordData.storeId);
+    const steps = recordData.mode === 'open' ? OPEN_STEPS : CLOSE_STEPS;
+
+    const photoUrls = [];
+    for (let i = 0; i < photoFiles.length; i++) {
+      if (photoFiles[i]) {
+        showToast(`上傳照片 ${i+1} / ${photoFiles.length}...`);
+        const fileName = `${recordData.storeId}_${steps[i].name}_${Date.now()}.jpg`;
+        const url = await uploadPhotoToDrive(photoFiles[i], fileName);
+        photoUrls.push(url);
+      } else {
+        photoUrls.push('');
+      }
+    }
+
+    showToast('儲存紀錄中...');
+    const payload = {
+      action: 'submit',
+      storeId: recordData.storeId,
+      storeName: store.name,
+      staff: recordData.staff,
+      email: currentUser ? currentUser.email : '',
+      mode: recordData.mode,
+      modeLabel: recordData.mode === 'open' ? '開店' : '閉店',
+      timeLabel: recordData.timeLabel,
+      stepNames: steps.map(s => s.name),
+      photoUrls,
+    };
+
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error);
+    return json.id;
+  };
+
+  // ── 讀取紀錄 ──
+  window.fbLoadRecords = async function() {
+    const res = await fetch(GAS_URL + '?action=load');
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error);
+    return json.records.map(r => ({
+      id: r.id, fbId: r.id,
+      store: r.storeName, storeId: r.storeId,
+      staff: r.staff, time: r.createdAt,
+      mode: r.modeLabel, status: r.status,
+      expanded: false,
+      photos: new Array((r.stepNames||[]).length).fill(null),
+      photoUrls: r.photoUrls || [],
+      stepNames: r.stepNames || [],
+    }));
+  };
+
+  window.fbUpdateStatus = async function(id, status, photoReviews, remark) {
+    await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action: 'updateStatus', id, status, remark }) });
+  };
+  window.fbUpdatePhotoReview = async function() {};
+
+  // Google GSI 載入完成後初始化
+  window.addEventListener('load', () => {
+    if (window.google) initGoogleAuth();
+    else document.querySelector('script[src*="gsi"]').addEventListener('load', initGoogleAuth);
+  });
+</script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+
+  :root {
+    --black: #111111;
+    --white: #FAFAF8;
+    --gray-100: #F2F1EE;
+    --gray-200: #E0DED9;
+    --gray-400: #A8A49D;
+    --gray-600: #6B6760;
+    --orange: #E8561F;
+    --orange-light: #FEF0EA;
+    --green: #1A7F5A;
+    --green-light: #EAF7F1;
+    --red: #C0392B;
+    --red-light: #FDEEEC;
+    --yellow: #E8A020;
+    --yellow-light: #FEF6E7;
+    --radius: 14px;
+    --radius-sm: 8px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    font-family: 'Noto Sans TC', sans-serif;
+    background: var(--gray-100);
+    color: var(--black);
+    min-height: 100vh;
+    max-width: 480px;
+    margin: 0 auto;
+    position: relative;
+  }
+
+  /* ── SCREENS ── */
+  .screen { display: none; min-height: 100vh; flex-direction: column; }
+  .screen.active { display: flex; }
+
+  /* ── SCREEN 1: SELECT ── */
+  #screen-select {
+    background: var(--black);
+    padding: 0;
+  }
+  .select-header {
+    padding: 56px 28px 32px;
+  }
+  .brand-mark {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 40px;
+  }
+  .brand-dot {
+    width: 32px; height: 32px; border-radius: 50%;
+    background: var(--orange);
+  }
+  .brand-name {
+    color: var(--white); font-size: 15px; font-weight: 500; letter-spacing: 0.05em;
+  }
+  .select-title {
+    color: var(--white); font-size: 28px; font-weight: 700; line-height: 1.3; margin-bottom: 8px;
+  }
+  .select-sub {
+    color: var(--gray-400); font-size: 14px;
+  }
+  .select-body {
+    background: var(--white);
+    border-radius: 28px 28px 0 0;
+    flex: 1;
+    padding: 32px 24px;
+  }
+  .section-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+    color: var(--gray-400); text-transform: uppercase; margin-bottom: 12px;
+  }
+  .store-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 28px;
+  }
+  .store-btn {
+    background: var(--gray-100);
+    border: 2px solid transparent;
+    border-radius: var(--radius);
+    padding: 16px 14px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.18s;
+    position: relative;
+    overflow: hidden;
+  }
+  .store-btn:active { transform: scale(0.97); }
+  .store-btn.selected {
+    background: var(--orange-light);
+    border-color: var(--orange);
+  }
+  .store-btn-code {
+    font-size: 11px; font-weight: 700; color: var(--gray-400);
+    letter-spacing: 0.08em; margin-bottom: 4px;
+  }
+  .store-btn.selected .store-btn-code { color: var(--orange); }
+  .store-btn-name { font-size: 15px; font-weight: 700; color: var(--black); }
+  .store-btn-type {
+    font-size: 11px; color: var(--gray-600); margin-top: 2px;
+  }
+  .store-check {
+    position: absolute; top: 10px; right: 10px;
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--orange);
+    display: none; align-items: center; justify-content: center;
+  }
+  .store-btn.selected .store-check { display: flex; }
+  .store-check svg { width: 11px; height: 11px; }
+
+  .name-input-wrap { margin-bottom: 28px; }
+  .name-input {
+    width: 100%;
+    background: var(--gray-100);
+    border: 2px solid transparent;
+    border-radius: var(--radius);
+    padding: 16px 18px;
+    font-size: 16px;
+    font-family: inherit;
+    color: var(--black);
+    transition: border-color 0.18s;
+    outline: none;
+  }
+  .name-input:focus { border-color: var(--orange); background: var(--white); }
+  .name-input::placeholder { color: var(--gray-400); }
+
+  .mode-toggle {
+    display: flex; gap: 8px; margin-bottom: 32px;
+  }
+  .mode-btn {
+    flex: 1; padding: 13px;
+    border-radius: var(--radius);
+    border: 2px solid var(--gray-200);
+    background: var(--white);
+    font-size: 14px; font-weight: 700;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.18s;
+    color: var(--gray-600);
+  }
+  .mode-btn.open.selected {
+    background: var(--orange); border-color: var(--orange); color: var(--white);
+  }
+  .mode-btn.close.selected {
+    background: var(--black); border-color: var(--black); color: var(--white);
+  }
+
+  .start-btn {
+    width: 100%; padding: 18px;
+    background: var(--black); color: var(--white);
+    border: none; border-radius: var(--radius);
+    font-size: 16px; font-weight: 700;
+    font-family: inherit; cursor: pointer;
+    transition: all 0.18s;
+    letter-spacing: 0.02em;
+  }
+  .start-btn:active { transform: scale(0.98); background: #333; }
+  .start-btn:disabled { background: var(--gray-200); color: var(--gray-400); cursor: not-allowed; }
+
+  /* ── SCREEN 2: CHECKLIST ── */
+  #screen-checklist { background: var(--gray-100); }
+
+  .checklist-header {
+    background: var(--white);
+    padding: 52px 24px 20px;
+    border-bottom: 1px solid var(--gray-200);
+  }
+  .back-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: none; border: none; cursor: pointer;
+    font-size: 13px; color: var(--gray-600); font-family: inherit;
+    margin-bottom: 16px; padding: 0;
+  }
+  .header-meta {
+    display: flex; align-items: flex-start; justify-content: space-between;
+  }
+  .header-store { font-size: 22px; font-weight: 700; }
+  .header-info { font-size: 13px; color: var(--gray-600); margin-top: 3px; }
+  .mode-badge {
+    padding: 6px 14px; border-radius: 20px;
+    font-size: 12px; font-weight: 700;
+  }
+  .mode-badge.open { background: var(--orange-light); color: var(--orange); }
+  .mode-badge.close { background: var(--black); color: var(--white); }
+
+  .progress-wrap {
+    background: var(--white);
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--gray-200);
+  }
+  .progress-row {
+    display: flex; justify-content: space-between;
+    align-items: center; margin-bottom: 10px;
+  }
+  .progress-text { font-size: 13px; color: var(--gray-600); }
+  .progress-count { font-size: 13px; font-weight: 700; color: var(--black); }
+  .progress-track {
+    height: 5px; background: var(--gray-200); border-radius: 3px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 5px; background: var(--orange);
+    border-radius: 3px; transition: width 0.4s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  .steps-list {
+    flex: 1; overflow-y: auto; padding: 16px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+
+  .step-card {
+    background: var(--white);
+    border-radius: var(--radius);
+    overflow: hidden;
+    border: 2px solid transparent;
+    transition: all 0.2s;
+  }
+  .step-card.done { border-color: var(--green); }
+  .step-card.flagged { border-color: var(--red); }
+  .step-card.current { border-color: var(--orange); }
+
+  .step-card-header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 16px 18px; cursor: pointer;
+  }
+  .step-num-badge {
+    width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700;
+    flex-shrink: 0;
+    background: var(--gray-100); color: var(--gray-600);
+    transition: all 0.2s;
+  }
+  .step-card.done .step-num-badge {
+    background: var(--green); color: var(--white);
+  }
+  .step-card.flagged .step-num-badge {
+    background: var(--red); color: var(--white);
+  }
+  .step-card.current .step-num-badge {
+    background: var(--orange); color: var(--white);
+  }
+  .step-card-title { flex: 1; }
+  .step-card-name { font-size: 15px; font-weight: 700; }
+  .step-card-desc { font-size: 12px; color: var(--gray-600); margin-top: 2px; }
+  .step-status-tag {
+    font-size: 11px; font-weight: 700; padding: 4px 10px;
+    border-radius: 20px;
+  }
+  .step-status-tag.done { background: var(--green-light); color: var(--green); }
+  .step-status-tag.pending { background: var(--orange-light); color: var(--orange); }
+  .step-status-tag.flagged { background: var(--red-light); color: var(--red); }
+  .step-status-tag.idle { background: var(--gray-100); color: var(--gray-400); }
+
+  .step-card-body {
+    padding: 0 18px 18px;
+    border-top: 1px solid var(--gray-200);
+    display: none;
+  }
+  .step-card.expanded .step-card-body { display: block; }
+  .step-card.expanded .step-card-header { padding-bottom: 14px; }
+
+  .ref-photo-section { margin-top: 14px; }
+  .ref-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    color: var(--gray-400); text-transform: uppercase; margin-bottom: 8px;
+  }
+  .ref-photo-box {
+    height: 100px; background: var(--gray-100);
+    border-radius: var(--radius-sm);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 6px; color: var(--gray-400); font-size: 12px;
+    border: 1px dashed var(--gray-200);
+  }
+  .ref-photo-box svg { width: 28px; height: 28px; opacity: 0.5; }
+
+  .upload-section { margin-top: 14px; }
+  .upload-box {
+    height: 100px; border-radius: var(--radius-sm);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 6px; font-size: 13px; font-weight: 700;
+    cursor: pointer; transition: all 0.18s;
+    border: 2px dashed var(--gray-200);
+    background: var(--gray-100); color: var(--gray-600);
+    position: relative; overflow: hidden;
+  }
+  .upload-box:active { transform: scale(0.98); }
+  .upload-box.uploaded {
+    border-color: var(--green); background: var(--green-light); color: var(--green);
+  }
+  .upload-box.flagged-box {
+    border-color: var(--red); background: var(--red-light); color: var(--red);
+  }
+  .upload-box svg { width: 28px; height: 28px; }
+  .upload-preview {
+    position: absolute; inset: 0;
+    object-fit: cover; width: 100%; height: 100%; opacity: 0.35;
+    display: none;
+  }
+  .upload-box.uploaded .upload-preview { display: block; }
+  .upload-overlay {
+    position: relative; z-index: 1;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+
+  .file-input { display: none; }
+
+  .confirm-step-btn {
+    width: 100%; margin-top: 14px;
+    padding: 14px; border-radius: var(--radius-sm);
+    border: none; font-size: 14px; font-weight: 700;
+    font-family: inherit; cursor: pointer; transition: all 0.18s;
+  }
+  .confirm-step-btn:not(:disabled) {
+    background: var(--black); color: var(--white);
+  }
+  .confirm-step-btn:disabled {
+    background: var(--gray-200); color: var(--gray-400); cursor: not-allowed;
+  }
+  .confirm-step-btn.done-state {
+    background: var(--green); color: var(--white);
+  }
+
+  .submit-bar {
+    padding: 16px 16px 32px;
+    background: var(--white);
+    border-top: 1px solid var(--gray-200);
+  }
+  .submit-all-btn {
+    width: 100%; padding: 18px;
+    background: var(--black); color: var(--white);
+    border: none; border-radius: var(--radius);
+    font-size: 16px; font-weight: 700;
+    font-family: inherit; cursor: pointer;
+    transition: all 0.18s; letter-spacing: 0.02em;
+  }
+  .submit-all-btn:disabled {
+    background: var(--gray-200); color: var(--gray-400); cursor: not-allowed;
+  }
+  .submit-all-btn:not(:disabled):active { transform: scale(0.98); }
+
+  /* ── SCREEN 3: DONE ── */
+  #screen-done {
+    background: var(--black);
+    align-items: center; justify-content: center;
+    text-align: center; padding: 40px 32px;
+  }
+  .done-circle {
+    width: 96px; height: 96px; border-radius: 50%;
+    background: var(--orange);
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 32px;
+    animation: pop 0.5s cubic-bezier(0.34,1.56,0.64,1);
+  }
+  @keyframes pop {
+    from { transform: scale(0); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+  .done-circle svg { width: 48px; height: 48px; }
+  .done-title { color: var(--white); font-size: 26px; font-weight: 700; margin-bottom: 12px; }
+  .done-sub { color: var(--gray-400); font-size: 14px; line-height: 1.6; margin-bottom: 48px; }
+  .done-highlight { color: var(--orange); font-weight: 700; }
+  .done-back-btn {
+    background: var(--white); color: var(--black);
+    border: none; border-radius: var(--radius);
+    padding: 16px 48px; font-size: 15px; font-weight: 700;
+    font-family: inherit; cursor: pointer;
+  }
+
+  /* ── MANAGER SCREEN ── */
+  #screen-manager { background: var(--gray-100); }
+  .mgr-header {
+    background: var(--white);
+    padding: 52px 24px 20px;
+    border-bottom: 1px solid var(--gray-200);
+  }
+  .mgr-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .mgr-sub { font-size: 13px; color: var(--gray-600); }
+  .mgr-stats {
+    display: grid; grid-template-columns: repeat(3,1fr); gap: 10px;
+    padding: 16px;
+  }
+  .stat-card {
+    background: var(--white); border-radius: var(--radius-sm);
+    padding: 14px 12px; text-align: center;
+  }
+  .stat-num { font-size: 24px; font-weight: 700; }
+  .stat-num.orange { color: var(--orange); }
+  .stat-num.green { color: var(--green); }
+  .stat-num.red { color: var(--red); }
+  .stat-lbl { font-size: 11px; color: var(--gray-600); margin-top: 2px; }
+
+  .mgr-list { flex: 1; overflow-y: auto; padding: 0 16px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+  .submission-card {
+    background: var(--white); border-radius: var(--radius);
+    overflow: hidden; border: 2px solid transparent;
+  }
+  .submission-card.pending { border-color: var(--yellow); }
+  .submission-card.approved { border-color: var(--green); }
+  .submission-card.rejected { border-color: var(--red); }
+
+  .sub-card-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 16px 18px; cursor: pointer;
+  }
+  .sub-store-badge {
+    background: var(--black); color: var(--white);
+    font-size: 11px; font-weight: 700; padding: 4px 10px;
+    border-radius: 20px; letter-spacing: 0.05em;
+  }
+  .sub-info { flex: 1; }
+  .sub-info-main { font-size: 14px; font-weight: 700; }
+  .sub-info-sub { font-size: 12px; color: var(--gray-600); margin-top: 1px; }
+  .sub-status-pill {
+    font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 20px;
+  }
+  .sub-status-pill.pending { background: var(--yellow-light); color: var(--yellow); }
+  .sub-status-pill.approved { background: var(--green-light); color: var(--green); }
+  .sub-status-pill.rejected { background: var(--red-light); color: var(--red); }
+
+  .sub-card-body { padding: 0 18px 18px; }
+  .photo-review-grid {
+    display: grid; grid-template-columns: repeat(5,1fr); gap: 8px; margin-bottom: 14px;
+  }
+  .photo-thumb-mgr {
+    aspect-ratio: 1; border-radius: 8px;
+    background: var(--gray-100);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 3px; border: 2px solid transparent;
+    cursor: pointer; transition: all 0.15s;
+    overflow: hidden; position: relative;
+  }
+  .photo-thumb-mgr:active { transform: scale(0.95); }
+  .photo-thumb-mgr.ok { border-color: var(--green); background: var(--green-light); }
+  .photo-thumb-mgr.bad { border-color: var(--red); background: var(--red-light); }
+  .photo-thumb-mgr .thumb-label { font-size: 9px; color: var(--gray-600); text-align: center; padding: 0 2px; line-height: 1.2; }
+  .thumb-corner-badge {
+    position: absolute; top: 3px; right: 3px;
+    width: 16px; height: 16px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px;
+  }
+  .thumb-corner-badge.ok { background: var(--green); color: var(--white); }
+  .thumb-corner-badge.bad { background: var(--red); color: var(--white); }
+
+  .mgr-action-row { display: flex; gap: 8px; }
+  .mgr-remark {
+    flex: 1; padding: 10px 14px;
+    border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm);
+    font-size: 13px; font-family: inherit; background: var(--gray-100);
+    color: var(--black); outline: none;
+  }
+  .mgr-remark:focus { border-color: var(--orange); background: var(--white); }
+  .mgr-approve-btn {
+    padding: 10px 18px; background: var(--green); color: var(--white);
+    border: none; border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer;
+  }
+  .mgr-reject-btn {
+    padding: 10px 18px; background: var(--white); color: var(--red);
+    border: 2px solid var(--red); border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 700; font-family: inherit; cursor: pointer;
+  }
+
+  /* Chevron */
+  .chev { transition: transform 0.2s; }
+  .expanded .chev { transform: rotate(180deg); }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--black); color: var(--white);
+    padding: 12px 24px; border-radius: 100px;
+    font-size: 13px; font-weight: 500;
+    transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    z-index: 999; white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  /* Manager entry fab */
+  .mgr-fab {
+    position: fixed; bottom: 32px; right: 20px;
+    background: var(--black); color: var(--white);
+    border: none; border-radius: 100px;
+    padding: 10px 18px; font-size: 12px; font-weight: 700;
+    font-family: inherit; cursor: pointer;
+    display: flex; align-items: center; gap: 6px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+  }
+
+  /* Lightbox for photo review */
+  .lightbox-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.75); z-index: 100;
+  }
+  .lightbox-overlay.open { display: flex; align-items: flex-end; }
+  .lightbox-sheet {
+    background: var(--white); width: 100%;
+    border-radius: 28px 28px 0 0;
+    padding: 28px 24px 48px;
+  }
+  .lightbox-title { font-size: 17px; font-weight: 700; margin-bottom: 4px; }
+  .lightbox-sub { font-size: 13px; color: var(--gray-600); margin-bottom: 18px; }
+  .lightbox-photo {
+    width: 100%; height: 200px; background: var(--gray-100);
+    border-radius: var(--radius); margin-bottom: 18px;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 8px; color: var(--gray-400); font-size: 13px;
+  }
+  .lightbox-photo svg { width: 36px; height: 36px; }
+  .lightbox-actions { display: flex; gap: 10px; }
+  .lb-ok-btn {
+    flex: 1; padding: 14px; background: var(--green); color: var(--white);
+    border: none; border-radius: var(--radius-sm);
+    font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer;
+  }
+  .lb-bad-btn {
+    flex: 1; padding: 14px; background: var(--white); color: var(--red);
+    border: 2px solid var(--red); border-radius: var(--radius-sm);
+    font-size: 14px; font-weight: 700; font-family: inherit; cursor: pointer;
+  }
+  .lb-close-btn {
+    width: 100%; margin-top: 10px; padding: 13px;
+    background: var(--gray-100); color: var(--gray-600);
+    border: none; border-radius: var(--radius-sm);
+    font-size: 14px; font-family: inherit; cursor: pointer;
+  }
+
+  @media (min-width: 481px) {
+    body { box-shadow: 0 0 60px rgba(0,0,0,0.12); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── SCREEN 1: SELECT ── -->
+<div class="screen active" id="screen-select">
+  <div class="select-header">
+    <div class="brand-mark">
+      <div class="brand-dot"></div>
+      <span class="brand-name">薯條</span>
+    </div>
+    <div class="select-title">開閉店<br>確認系統</div>
+    <div class="select-sub">選擇門市與操作類型後開始</div>
+  </div>
+  <div class="select-body">
+    <!-- 登入區塊 -->
+    <div id="login-section" style="text-align:center; padding: 20px 0 32px;">
+      <div style="font-size:15px; font-weight:700; color:var(--black); margin-bottom:8px;">請先登入 Google 帳號</div>
+      <div style="font-size:13px; color:var(--gray-600); margin-bottom:24px;">照片將上傳至公司 Google Drive</div>
+      <button onclick="requestLogin()" style="
+        display:inline-flex; align-items:center; gap:10px;
+        background:var(--white); color:var(--black);
+        border: 2px solid var(--gray-200); border-radius:var(--radius);
+        padding:14px 24px; font-size:14px; font-weight:700;
+        font-family:inherit; cursor:pointer;
+      ">
+        <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        使用 Google 帳號登入
+      </button>
+    </div>
+    <!-- 主要內容（登入後顯示）-->
+    <div id="main-section" style="display:none;">
+    <!-- 補件通知區 -->
+    <div id="rejected-notice" style="display:none; background:var(--red-light); border:1.5px solid var(--red); border-radius:var(--radius); padding:14px 16px; margin-bottom:20px; cursor:pointer;" onclick="goRepair()">
+      <div style="font-size:13px; font-weight:700; color:var(--red); margin-bottom:4px;">⚠️ 有步驟需要補件</div>
+      <div style="font-size:12px; color:var(--red);" id="rejected-notice-text">點此查看並補拍照片</div>
+    </div>
+    <div class="section-label">選擇門市</div>
+    <div class="store-grid" id="store-grid"></div>
+
+    <div class="section-label">操作人員姓名</div>
+    <div class="name-input-wrap">
+      <input class="name-input" id="name-input" type="text" placeholder="輸入您的姓名" maxlength="10" oninput="checkReady()">
+    </div>
+
+    <div class="section-label">操作類型</div>
+    <div class="mode-toggle">
+      <button class="mode-btn open" id="btn-open" onclick="selectMode('open')">🌅 開店</button>
+      <button class="mode-btn close" id="btn-close" onclick="selectMode('close')">🌙 閉店</button>
+    </div>
+
+    <button class="start-btn" id="start-btn" disabled onclick="startChecklist()">開始確認 →</button>
+    </div><!-- end main-section -->
+  </div>
+</div>
+
+<!-- ── SCREEN 2: CHECKLIST ── -->
+<div class="screen" id="screen-checklist">
+  <div class="checklist-header">
+    <button class="back-btn" onclick="goBack()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M19 12H5M5 12l7 7M5 12l7-7"/></svg>
+      返回
+    </button>
+    <div class="header-meta">
+      <div>
+        <div class="header-store" id="header-store-name"></div>
+        <div class="header-info" id="header-info"></div>
+      </div>
+      <div class="mode-badge" id="mode-badge"></div>
+    </div>
+  </div>
+  <div class="progress-wrap">
+    <div class="progress-row">
+      <span class="progress-text">完成進度</span>
+      <span class="progress-count" id="progress-count">0 / 0</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+    </div>
+  </div>
+  <div class="steps-list" id="steps-list"></div>
+  <div class="submit-bar">
+    <button class="submit-all-btn" id="submit-all-btn" disabled onclick="submitAll()">送出確認紀錄</button>
+  </div>
+</div>
+
+<!-- ── SCREEN 3: DONE ── -->
+<div class="screen" id="screen-done">
+  <div class="done-circle">
+    <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M20 6L9 17l-5-5"/>
+    </svg>
+  </div>
+  <div class="done-title">紀錄送出完成</div>
+  <div class="done-sub" id="done-sub">主管已收到通知<br>如有問題將透過 LINE 通知</div>
+  <button class="done-back-btn" onclick="goHome()">返回首頁</button>
+</div>
+
+<!-- ── SCREEN 5: REPAIR ── -->
+<div class="screen" id="screen-repair" style="background:var(--gray-100);">
+  <div style="background:var(--white); padding:52px 24px 20px; border-bottom:1px solid var(--gray-200);">
+    <button style="display:inline-flex;align-items:center;gap:6px;background:none;border:none;cursor:pointer;font-size:13px;color:var(--gray-600);font-family:inherit;margin-bottom:16px;padding:0;" onclick="showScreen('select')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M19 12H5M5 12l7 7M5 12l7-7"/></svg>
+      返回
+    </button>
+    <div style="font-size:22px;font-weight:700;">補件</div>
+    <div style="font-size:13px;color:var(--gray-600);margin-top:3px;" id="repair-sub">補拍退回的步驟照片</div>
+  </div>
+  <div style="flex:1;overflow-y:auto;padding:16px;" id="repair-list"></div>
+  <div style="padding:16px 16px 32px;background:var(--white);border-top:1px solid var(--gray-200);">
+    <button id="repair-submit-btn" disabled onclick="submitRepair()" style="width:100%;padding:18px;background:var(--black);color:var(--white);border:none;border-radius:var(--radius);font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;">送出補件</button>
+  </div>
+</div>
+
+<!-- ── SCREEN 4: MANAGER ── -->
+<div class="screen" id="screen-manager">
+  <div class="mgr-header">
+    <div class="mgr-title">主管審核</div>
+    <div class="mgr-sub" id="mgr-date"></div>
+  </div>
+  <div class="mgr-stats">
+    <div class="stat-card"><div class="stat-num orange" id="stat-pending">0</div><div class="stat-lbl">待審核</div></div>
+    <div class="stat-card"><div class="stat-num green" id="stat-approved">0</div><div class="stat-lbl">已核准</div></div>
+    <div class="stat-card"><div class="stat-num red" id="stat-rejected">0</div><div class="stat-lbl">已退回</div></div>
+  </div>
+  <div class="mgr-list" id="mgr-list"></div>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox-overlay" id="lightbox">
+  <div class="lightbox-sheet">
+    <div class="lightbox-title" id="lb-step-title"></div>
+    <div class="lightbox-sub" id="lb-step-sub"></div>
+    <div class="lightbox-photo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="3"/></svg>
+      員工上傳照片
+    </div>
+    <div class="lightbox-actions">
+      <button class="lb-ok-btn" onclick="markPhotoOk()">✓ 照片正常</button>
+      <button class="lb-bad-btn" onclick="markPhotoBad()">✗ 標記異常</button>
+    </div>
+    <button class="lb-close-btn" onclick="closeLightbox()">關閉</button>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- 主管審核移至 Google Sheets -->
+
+<script>
+// ── DATA ──
+const STORES = [
+  { id: 'S01', name: '1號店', type: '薯條' },
+  { id: 'S02', name: '2號店', type: '薯條' },
+  { id: 'S03', name: '3號店', type: '薯條' },
+];
+
+const OPEN_STEPS = [
+  { name: '步驟1', desc: '開店步驟1說明', icon: '1️⃣' },
+  { name: '步驟2', desc: '開店步驟2說明', icon: '2️⃣' },
+  { name: '步驟3', desc: '開店步驟3說明', icon: '3️⃣' },
+];
+
+const CLOSE_STEPS = [
+  { name: '步驟1', desc: '閉店步驟1說明', icon: '1️⃣' },
+  { name: '步驟2', desc: '閉店步驟2說明', icon: '2️⃣' },
+  { name: '步驟3', desc: '閉店步驟3說明', icon: '3️⃣' },
+];
+
+// ── STATE ──
+let state = {
+  selectedStore: null,
+  staffName: '',
+  mode: null,
+  steps: [],
+  uploads: [],
+  done: [],
+  expanded: [],
+};
+
+// submissions 從 Google Sheets 即時讀取
+let submissions = [
+  {
+    id: 'demo', store: '（測試用）', storeId: 'S01', staff: '測試員工',
+    time: '09:00', mode: '開店', status: 'pending',
+    expanded: false,
+    photos: [null, null, null],
+  },
+  {
+    id: 3, store: '小橘', storeId: 'TE01', staff: '陳大偉',
+    time: '08:50', mode: '開店', status: 'approved',
+    expanded: false,
+    photos: ['ok','ok','ok','ok','ok','ok'],
+  },
+];
+
+let lbContext = { subId: null, photoIdx: null };
+
+// ── INIT ──
+function init() {
+  renderStoreGrid();
+  updateMgrDate();
+}
+
+function renderStoreGrid() {
+  const grid = document.getElementById('store-grid');
+  grid.innerHTML = STORES.map(s => `
+    <button class="store-btn" id="store-${s.id}" onclick="selectStore('${s.id}')">
+      <div class="store-check">
+        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+      </div>
+      <div class="store-btn-code">${s.id}</div>
+      <div class="store-btn-name">${s.name}</div>
+      <div class="store-btn-type">${s.type}</div>
+    </button>
+  `).join('');
+}
+
+// ── SELECTION ──
+function selectStore(id) {
+  state.selectedStore = id;
+  document.querySelectorAll('.store-btn').forEach(b => b.classList.remove('selected'));
+  document.getElementById('store-' + id).classList.add('selected');
+  checkReady();
+}
+
+function selectMode(m) {
+  state.mode = m;
+  document.getElementById('btn-open').classList.toggle('selected', m === 'open');
+  document.getElementById('btn-close').classList.toggle('selected', m === 'close');
+  checkReady();
+}
+
+function checkReady() {
+  state.staffName = document.getElementById('name-input').value.trim();
+  const ready = state.selectedStore && state.staffName.length >= 1 && state.mode;
+  document.getElementById('start-btn').disabled = !ready;
+}
+
+// ── CHECKLIST ──
+function startChecklist() {
+  const store = STORES.find(s => s.id === state.selectedStore);
+  state.steps = state.mode === 'open' ? OPEN_STEPS : CLOSE_STEPS;
+  state.uploads = new Array(state.steps.length).fill(null);
+  state.uploadFiles = new Array(state.steps.length).fill(null);
+  state.done = new Array(state.steps.length).fill(false);
+  state.expanded = state.steps.map((_, i) => i === 0);
+
+  document.getElementById('header-store-name').textContent = store.name;
+  document.getElementById('header-info').textContent = `${state.staffName} · ${now()}`;
+  const badge = document.getElementById('mode-badge');
+  badge.textContent = state.mode === 'open' ? '🌅 開店' : '🌙 閉店';
+  badge.className = 'mode-badge ' + state.mode;
+
+  renderSteps();
+  showScreen('checklist');
+  
+}
+
+function renderSteps() {
+  const list = document.getElementById('steps-list');
+  list.innerHTML = state.steps.map((step, i) => {
+    const isDone = state.done[i];
+    const hasUpload = state.uploads[i] !== null;
+    const isExpanded = state.expanded[i];
+    const isCurrent = !isDone && i === state.done.indexOf(false);
+
+    let cardClass = 'step-card';
+    if (isDone) cardClass += ' done';
+    else if (isCurrent) cardClass += ' current';
+    if (isExpanded) cardClass += ' expanded';
+
+    let statusTag = '';
+    if (isDone) statusTag = '<span class="step-status-tag done">完成</span>';
+    else if (hasUpload) statusTag = '<span class="step-status-tag pending">待確認</span>';
+    else statusTag = '<span class="step-status-tag idle">未開始</span>';
+
+    let uploadClass = 'upload-box';
+    let uploadContent = `
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <rect x="3" y="5" width="18" height="14" rx="2"/>
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 1v3M12 20v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12"/>
+      </svg>
+      <div class="upload-overlay"><span>點擊拍照 / 上傳</span></div>`;
+
+    if (state.uploads[i]) {
+      uploadClass += ' uploaded';
+      uploadContent = `
+        <img class="upload-preview" src="${state.uploads[i]}" alt="">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:24px;height:24px;position:relative;z-index:1"><path d="M20 6L9 17l-5-5"/></svg>
+        <div class="upload-overlay"><span>照片已上傳</span></div>`;
+    }
+
+    const confirmDisabled = !hasUpload || isDone;
+    const confirmClass = isDone ? 'confirm-step-btn done-state' : 'confirm-step-btn';
+    const confirmText = isDone ? '✓ 已確認完成' : '確認此步驟完成';
+
+    return `
+      <div class="${cardClass}" id="step-card-${i}">
+        <div class="step-card-header" onclick="toggleStep(${i})">
+          <div class="step-num-badge">${isDone ? '✓' : i + 1}</div>
+          <div class="step-card-title">
+            <div class="step-card-name">${step.icon} ${step.name}</div>
+            <div class="step-card-desc">${step.desc}</div>
+          </div>
+          ${statusTag}
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="#A8A49D" stroke-width="2" width="18" height="18"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="step-card-body">
+          <div class="ref-photo-section">
+            <div class="ref-label">範例照片</div>
+            <div class="ref-photo-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M3 9h18"/></svg>
+              <span>${step.name} 示意圖</span>
+              <span style="font-size:10px;color:#C8C5BF">（正式版請上傳實際照片）</span>
+            </div>
+          </div>
+          <div class="upload-section">
+            <div class="ref-label">上傳確認照片</div>
+            <input type="file" class="file-input" id="file-${i}" accept="image/*" capture="environment" onchange="handleUpload(${i}, this)">
+            <div class="${uploadClass}" onclick="document.getElementById('file-${i}').click()">
+              ${uploadContent}
+            </div>
+          </div>
+          <button class="${confirmClass}" ${confirmDisabled ? 'disabled' : ''} onclick="confirmStep(${i})">${confirmText}</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  updateProgress();
+}
+
+function toggleStep(i) {
+  state.expanded[i] = !state.expanded[i];
+  renderSteps();
+}
+
+function handleUpload(idx, input) {
+  const file = input.files[0];
+  if (!file) return;
+  state.uploadFiles[idx] = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    state.uploads[idx] = e.target.result;
+    renderSteps();
+    showToast('照片已選取');
+  };
+  reader.readAsDataURL(file);
+}
+
+function confirmStep(i) {
+  if (!state.uploads[i]) return;
+  state.done[i] = true;
+  state.expanded[i] = false;
+  // auto-expand next undone
+  const next = state.done.indexOf(false);
+  if (next !== -1) state.expanded[next] = true;
+  renderSteps();
+
+  if (state.done.every(Boolean)) {
+    document.getElementById('submit-all-btn').disabled = false;
+    showToast('全部步驟完成！請送出紀錄');
+  }
+}
+
+function updateProgress() {
+  const done = state.done.filter(Boolean).length;
+  const total = state.steps.length;
+  document.getElementById('progress-count').textContent = `${done} / ${total}`;
+  document.getElementById('progress-fill').style.width = `${(done / total) * 100}%`;
+  document.getElementById('submit-all-btn').disabled = done < total;
+}
+
+async function submitAll() {
+  const btn = document.getElementById('submit-all-btn');
+  btn.disabled = true;
+  btn.textContent = '上傳中，請稍候...';
+
+  const store = STORES.find(s => s.id === state.selectedStore);
+
+  try {
+    if (window.firebaseReady) {
+      const fbId = await window.fbSubmitRecord(
+        { storeId: store.id, staff: state.staffName, mode: state.mode, timeLabel: now() },
+        state.uploadFiles
+      );
+      // 加入本地 submissions 供主管頁顯示
+      submissions.unshift({
+        id: Date.now(), fbId,
+        store: store.name, storeId: store.id,
+        staff: state.staffName, time: now(),
+        mode: state.mode === 'open' ? '開店' : '閉店',
+        status: 'pending', expanded: false,
+        photos: new Array(state.steps.length).fill(null),
+        photoUrls: new Array(state.steps.length).fill(null),
+      });
+      showToast('紀錄已上傳至雲端');
+    } else {
+      // Firebase 未就緒時 fallback
+      submissions.unshift({
+        id: Date.now(), store: store.name, storeId: store.id,
+        staff: state.staffName, time: now(),
+        mode: state.mode === 'open' ? '開店' : '閉店',
+        status: 'pending', expanded: false,
+        photos: new Array(state.steps.length).fill(null),
+      });
+    }
+  } catch(e) {
+    showToast('上傳失敗，請重試');
+    btn.disabled = false;
+    btn.textContent = '送出確認紀錄';
+    return;
+  }
+
+  const doneEl = document.getElementById('done-sub');
+  doneEl.innerHTML = `<span class="done-highlight">${store.name}</span> ${state.mode === 'open' ? '開店' : '閉店'}紀錄已送出<br>主管將透過 LINE 收到通知`;
+  showScreen('done');
+}
+
+// ── MANAGER ──
+async function goManager() {
+  showScreen('manager');
+  
+  document.getElementById('mgr-list').innerHTML = '<div style="padding:32px;text-align:center;color:var(--gray-400);font-size:14px;">載入中...</div>';
+
+  if (window.firebaseReady) {
+    try {
+      const fbRecords = await window.fbLoadRecords();
+      if (fbRecords.length > 0) {
+        submissions = fbRecords.map(r => ({
+          id: r.fbId, fbId: r.fbId,
+          store: r.storeName, storeId: r.storeId,
+          staff: r.staff, time: r.timeLabel || '--',
+          mode: r.modeLabel,
+          status: r.status,
+          expanded: false,
+          photos: r.photoReviews || new Array((r.stepNames || []).length).fill(null),
+          photoUrls: r.photoUrls || [],
+          stepNames: r.stepNames || [],
+        }));
+      }
+    } catch(e) {
+      showToast('載入紀錄失敗');
+    }
+  }
+
+  renderManager();
+}
+
+function updateMgrDate() {
+  const d = new Date();
+  document.getElementById('mgr-date').textContent =
+    `${d.getFullYear()}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')} 審核總覽`;
+}
+
+function renderManager() {
+  const pending = submissions.filter(s => s.status === 'pending').length;
+  const approved = submissions.filter(s => s.status === 'approved').length;
+  const rejected = submissions.filter(s => s.status === 'rejected').length;
+  document.getElementById('stat-pending').textContent = pending;
+  document.getElementById('stat-approved').textContent = approved;
+  document.getElementById('stat-rejected').textContent = rejected;
+
+  const list = document.getElementById('mgr-list');
+  list.innerHTML = submissions.map(s => {
+    const statusClass = s.status;
+    const statusText = s.status === 'pending' ? '待審核' : s.status === 'approved' ? '已核准' : '已退回';
+    const steps = s.mode === '開店' ? OPEN_STEPS : CLOSE_STEPS;
+
+    const thumbs = steps.map((step, i) => {
+      const photoState = s.photos[i];
+      let cls = 'photo-thumb-mgr';
+      if (photoState === 'ok') cls += ' ok';
+      if (photoState === 'bad') cls += ' bad';
+      const badge = photoState === 'ok'
+        ? '<div class="thumb-corner-badge ok">✓</div>'
+        : photoState === 'bad'
+        ? '<div class="thumb-corner-badge bad">✗</div>' : '';
+      return `<div class="${cls}" onclick="openLightbox(${s.id}, ${i})">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="18" height="18" style="color:var(--gray-400)"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="3"/></svg>
+        <div class="thumb-label">${step.name}</div>
+        ${badge}
+      </div>`;
+    }).join('');
+
+    const actionsHtml = s.status === 'pending' ? `
+      <div class="mgr-action-row">
+        <input class="mgr-remark" placeholder="退回備註（選填）" id="remark-${s.id}">
+        <button class="mgr-reject-btn" onclick="doAction(${s.id},'rejected')">退回</button>
+        <button class="mgr-approve-btn" onclick="doAction(${s.id},'approved')">核准</button>
+      </div>` : `<div style="font-size:12px;color:${s.status==='approved'?'var(--green)':'var(--red)'}; padding:4px 0; font-weight:700;">
+        ${s.status==='approved' ? '✓ 已核准' : '✗ 已退回'}
+      </div>`;
+
+    return `
+      <div class="submission-card ${statusClass}">
+        <div class="sub-card-header ${s.expanded ? 'expanded' : ''}" onclick="toggleSub(${s.id})">
+          <div class="sub-store-badge">${s.storeId}</div>
+          <div class="sub-info">
+            <div class="sub-info-main">${s.store} · ${s.mode}</div>
+            <div class="sub-info-sub">${s.staff} · ${s.time}</div>
+          </div>
+          <span class="sub-status-pill ${statusClass}">${statusText}</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="#A8A49D" stroke-width="2" width="18" height="18"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        ${s.expanded ? `<div class="sub-card-body">
+          <div style="font-size:11px;font-weight:700;letter-spacing:0.08em;color:var(--gray-400);text-transform:uppercase;margin-bottom:10px;">點擊縮圖審核照片</div>
+          <div class="photo-review-grid">${thumbs}</div>
+          ${actionsHtml}
+        </div>` : ''}
+      </div>`;
+  }).join('');
+}
+
+function toggleSub(id) {
+  submissions = submissions.map(s => s.id === id ? {...s, expanded: !s.expanded} : s);
+  renderManager();
+}
+
+async function doAction(id, status) {
+  const sub = submissions.find(s => s.id === id);
+  const remark = document.getElementById('remark-' + id)?.value || '';
+  submissions = submissions.map(s => s.id === id ? {...s, status, expanded: false} : s);
+  renderManager();
+  showToast(status === 'approved' ? '已核准' : '已退回，員工將收到通知');
+
+  if (window.firebaseReady && sub?.fbId) {
+    try {
+      await window.fbUpdateStatus(sub.fbId, status, sub.photos, remark);
+    } catch(e) {
+      console.error('狀態更新失敗', e);
+    }
+  }
+}
+
+function openLightbox(subId, idx) {
+  const sub = submissions.find(s => s.id === subId);
+  const steps = sub.mode === '開店' ? OPEN_STEPS : CLOSE_STEPS;
+  lbContext = { subId, photoIdx: idx };
+  document.getElementById('lb-step-title').textContent = steps[idx].name;
+  document.getElementById('lb-step-sub').textContent = steps[idx].desc;
+  document.getElementById('lightbox').classList.add('open');
+}
+
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+  lbContext = { subId: null, photoIdx: null };
+}
+
+function markPhotoOk() {
+  markPhoto('ok');
+}
+function markPhotoBad() {
+  markPhoto('bad');
+}
+async function markPhoto(photoState) {
+  const { subId, photoIdx } = lbContext;
+  let targetSub = null;
+  submissions = submissions.map(s => {
+    if (s.id !== subId) return s;
+    const p = [...s.photos];
+    p[photoIdx] = photoState;
+    targetSub = {...s, photos: p};
+    return targetSub;
+  });
+  closeLightbox();
+  renderManager();
+
+  if (window.firebaseReady && targetSub?.fbId) {
+    try {
+      await window.fbUpdatePhotoReview(targetSub.fbId, targetSub.photos);
+    } catch(e) {
+      console.error('照片標記更新失敗', e);
+    }
+  }
+}
+
+// ── UTILS ──
+function showScreen(name) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function goBack() {
+  showScreen('select');
+  
+}
+
+function goHome() {
+  showScreen('select');
+  
+}
+
+function now() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ── REPAIR（補件）──
+let repairRecord = null;
+let repairUploads = {};
+let repairFiles = {};
+
+async function checkRejected() {
+  if (!window.firebaseReady) return;
+  try {
+    const res = await fetch(GAS_URL + '?action=load');
+    const json = await res.json();
+    if (!json.ok) return;
+    // 找目前登入者的退回紀錄
+    const email = currentUser ? currentUser.email : null;
+    const rejected = json.records.filter(r =>
+      r.status === 'rejected' &&
+      (r.staff === state.staffName || r.staff === (currentUser && currentUser.name))
+    );
+    if (rejected.length > 0) {
+      repairRecord = rejected[0];
+      const notice = document.getElementById('rejected-notice');
+      const noticeText = document.getElementById('rejected-notice-text');
+      if (notice) {
+        notice.style.display = 'block';
+        const rejectedSteps = (repairRecord.stepNames || []).filter((_,i) =>
+          (repairRecord.stepStatus || [])[i] === 'rejected'
+        );
+        noticeText.textContent = `${repairRecord.storeName} ${repairRecord.modeLabel}：${rejectedSteps.join('、')} 需補拍`;
+      }
+    }
+  } catch(e) {}
+}
+
+function goRepair() {
+  if (!repairRecord) return;
+  renderRepair();
+  showScreen('repair');
+}
+
+function renderRepair() {
+  const r = repairRecord;
+  document.getElementById('repair-sub').textContent =
+    `${r.storeName} ${r.modeLabel} · ${r.staff}`;
+
+  const list = document.getElementById('repair-list');
+  list.innerHTML = (r.stepNames || []).map((name, i) => {
+    const isRejected = (r.stepStatus || [])[i] === 'rejected';
+    if (!isRejected) return ''; // 只顯示退回的步驟
+    const hasUpload = repairUploads[i];
+    return `
+    <div style="background:var(--white);border-radius:var(--radius);overflow:hidden;border:2px solid ${hasUpload ? 'var(--green)' : 'var(--red)'};margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--gray-200);background:var(--red-light);">
+        <div style="width:28px;height:28px;border-radius:50%;background:var(--red);color:var(--white);font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;">${i+1}</div>
+        <div style="font-size:14px;font-weight:700;">${name}</div>
+        ${hasUpload ? '<span style="margin-left:auto;font-size:11px;font-weight:700;color:var(--green);">✓ 已補拍</span>' : '<span style="margin-left:auto;font-size:11px;font-weight:700;color:var(--red);">需補拍</span>'}
+      </div>
+      <div style="padding:14px 16px;">
+        ${r.photoUrls && r.photoUrls[i] ? `<img src="${r.photoUrls[i]}" style="width:100%;height:80px;object-fit:cover;border-radius:var(--radius-sm);margin-bottom:10px;opacity:0.5;" alt="原照片">
+        <div style="font-size:11px;color:var(--gray-400);margin-bottom:8px;">↑ 原照片（需重拍）</div>` : ''}
+        <input type="file" id="repair-file-${i}" accept="image/*" capture="environment" style="display:none" onchange="handleRepairUpload(${i},this)">
+        <div onclick="document.getElementById('repair-file-${i}').click()" style="
+          height:80px;border-radius:var(--radius-sm);border:2px dashed ${hasUpload ? 'var(--green)' : 'var(--gray-200)'};
+          background:${hasUpload ? 'var(--green-light)' : 'var(--gray-100)'};
+          display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+          cursor:pointer;font-size:13px;font-weight:700;color:${hasUpload ? 'var(--green)' : 'var(--gray-600)'};
+        ">${hasUpload ? '✓ 已選取，點此重拍' : '點此拍照補件'}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  updateRepairBtn();
+}
+
+function handleRepairUpload(idx, input) {
+  const file = input.files[0];
+  if (!file) return;
+  repairFiles[idx] = file;
+  const reader = new FileReader();
+  reader.onload = e => { repairUploads[idx] = e.target.result; renderRepair(); };
+  reader.readAsDataURL(file);
+}
+
+function updateRepairBtn() {
+  const r = repairRecord;
+  const rejectedIdxs = (r.stepNames || []).map((_,i) => (r.stepStatus||[])[i]==='rejected' ? i : -1).filter(i=>i>=0);
+  const allDone = rejectedIdxs.every(i => repairUploads[i]);
+  document.getElementById('repair-submit-btn').disabled = !allDone;
+}
+
+async function submitRepair() {
+  const btn = document.getElementById('repair-submit-btn');
+  btn.disabled = true;
+  btn.textContent = '上傳中...';
+  const r = repairRecord;
+
+  try {
+    const rejectedIdxs = (r.stepNames||[]).map((_,i)=>(r.stepStatus||[])[i]==='rejected'?i:-1).filter(i=>i>=0);
+    for (const i of rejectedIdxs) {
+      showToast(`上傳步驟 ${i+1} 照片...`);
+      const fileName = `${r.storeId}_補件_步驟${i+1}_${Date.now()}.jpg`;
+      const url = await uploadPhotoToDrive(repairFiles[i], fileName);
+      // 更新回 Sheets
+      await fetch(GAS_URL, { method:'POST', body: JSON.stringify({
+        action: 'updatePhoto', id: r.id, stepIndex: i, photoUrl: url
+      })});
+    }
+    showToast('補件完成！');
+    repairRecord = null;
+    repairUploads = {};
+    repairFiles = {};
+    document.getElementById('rejected-notice').style.display = 'none';
+    showScreen('select');
+  } catch(e) {
+    showToast('上傳失敗，請重試');
+    btn.disabled = false;
+    btn.textContent = '送出補件';
+  }
+}
+
+init();
+</script>
+</body>
+</html>
