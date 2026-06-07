@@ -203,15 +203,6 @@ function setFilter(f, el) {
   renderAll();
 }
 
-function cleanDate(d) {
-  if (!d) return '';
-  if (d.includes('T')) {
-    const dt = new Date(d);
-    return dt.getFullYear() + '/' + String(dt.getMonth()+1).padStart(2,'0') + '/' + String(dt.getDate()+1).padStart(2,'0');
-  }
-  return d.replace(/-/g, '/');
-}
-
 function renderAll() {
   let filtered = requests;
   if (filter === 'purchase') filtered = requests.filter(r => r.type === 'purchase');
