@@ -271,7 +271,7 @@ function renderCard(r) {
     + (r.urgent === '緊急' ? '<span class="urgent-badge">緊急</span>' : '')
     + '<div class="req-info">'
     + '<div class="req-info-main">' + r.product + '</div>'
-    + '<div class="req-info-sub">' + r.dept + ' · ' + r.name + ' · ' + r.date + '</div>'
+    '<div class="req-info-sub">' + r.dept + ' · ' + r.name + ' · ' + cleanDate(r.date) + '</div>'
     + '</div>'
     + '<span class="status-pill ' + r.status + '">' + statusText + '</span>'
     + '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="#A8A49D" stroke-width="2" width="18" height="18"><path d="M6 9l6 6 6-6"/></svg>'
