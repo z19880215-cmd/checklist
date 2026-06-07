@@ -196,6 +196,13 @@ async function loadRequests() {
   }
 }
 
+function setFilter(f, el) {
+  filter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderAll();
+}
+
 function cleanDate(d) {
   if (!d) return '';
   if (d.includes('T')) {
@@ -203,13 +210,6 @@ function cleanDate(d) {
     return dt.getFullYear() + '/' + String(dt.getMonth()+1).padStart(2,'0') + '/' + String(dt.getDate()+1).padStart(2,'0');
   }
   return d.replace(/-/g, '/');
-}
-  
-function setFilter(f, el) {
-  filter = f;
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-  el.classList.add('active');
-  renderAll();
 }
 
 function renderAll() {
