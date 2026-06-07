@@ -375,7 +375,7 @@ async function submitForm() {
       typeLabel: formType === 'purchase' ? '請購' : '維修',
       dept: document.getElementById('field-dept').value,
       name: document.getElementById('field-name').value.trim(),
-      date: document.getElementById('field-date').value,
+      date: document.getElementById('field-date').value.substring(0, 10),
       urgent: isUrgent ? '緊急' : '一般',
       product: formType === 'purchase' ? document.getElementById('field-product').value.trim() : document.getElementById('field-equipment').value.trim(),
       spec: formType === 'purchase' ? (document.getElementById('field-spec').value.trim() || '') : '',
