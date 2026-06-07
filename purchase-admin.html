@@ -289,7 +289,7 @@ function renderCard(r) {
       + '<div class="detail-grid">'
       + '<div class="detail-item"><div class="detail-label">部門</div><div class="detail-value">' + r.dept + '</div></div>'
       + '<div class="detail-item"><div class="detail-label">申請人</div><div class="detail-value">' + r.name + '</div></div>'
-      + '<div class="detail-item"><div class="detail-label">日期</div><div class="detail-value">' + r.date + '</div></div>'
+      + '<div class="detail-item"><div class="detail-label">日期</div><div class="detail-value">' + cleanDate(r.date) + '</div></div>'
       + '<div class="detail-item"><div class="detail-label">緊急程度</div><div class="detail-value">' + r.urgent + '</div></div>'
       + (r.spec ? '<div class="detail-item"><div class="detail-label">規格</div><div class="detail-value">' + r.spec + '</div></div>' : '')
       + (r.qty ? '<div class="detail-item"><div class="detail-label">數量</div><div class="detail-value">' + r.qty + '</div></div>' : '')
