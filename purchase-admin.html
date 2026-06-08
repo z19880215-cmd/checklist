@@ -153,26 +153,42 @@ function cleanDate(d) {
   return s.replace(/-/g, '/');
 }
 
+function enterMain() {
+  document.getElementById('screen-login').style.display = 'none';
+  document.getElementById('screen-main').style.display = 'block';
+  const d = new Date();
+  document.getElementById('admin-date').textContent =
+    d.getFullYear() + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0');
+  loadRequests();
+}
+
 function initGoogleAuth() {
   const client = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: 'https://www.googleapis.com/auth/userinfo.profile',
     callback: (resp) => {
-      if (resp.error) { showToast('登入失敗'); return; }
+      if (resp.error) {
+        // 靜默登入失敗時，不跳錯誤；只回到登入畫面讓使用者手動登入。
+        document.getElementById('screen-login').style.display = 'flex';
+        document.getElementById('screen-main').style.display = 'none';
+        return;
+      }
       accessToken = resp.access_token;
-      document.getElementById('screen-login').style.display = 'none';
-      document.getElementById('screen-main').style.display = 'block';
-      const d = new Date();
-      document.getElementById('admin-date').textContent =
-        d.getFullYear() + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0');
-      loadRequests();
+      localStorage.setItem('yx_admin_remember_login', '1');
+      enterMain();
     },
   });
   window._tokenClient = client;
+
+  // 如果這台設備曾經登入過，嘗試靜默取得 token。
+  // 注意：Google token 不會永久保存；若瀏覽器清除資料、Token 過期、或 Google 要求重新驗證，仍會回到登入頁。
+  if (localStorage.getItem('yx_admin_remember_login') === '1') {
+    client.requestAccessToken({ prompt: '' });
+  }
 }
 
 function requestLogin() {
-  if (window._tokenClient) window._tokenClient.requestAccessToken();
+  if (window._tokenClient) window._tokenClient.requestAccessToken({ prompt: 'consent' });
 }
 
 window.addEventListener('load', () => {
