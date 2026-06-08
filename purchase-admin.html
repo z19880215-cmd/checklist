@@ -73,6 +73,7 @@
   .edit-label{font-size:12px;font-weight:700;color:var(--gray-600);margin-bottom:5px;}
   .edit-input,.edit-select{width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;background:var(--gray-100);color:var(--black);outline:none;}
   .edit-input:focus,.edit-select:focus{border-color:var(--blue);background:var(--white);}
+  textarea.edit-input{min-height:110px;line-height:1.55;resize:vertical;white-space:pre-wrap;}
   .edit-row-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
   .action-btns{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
   .save-btn{width:100%;padding:13px;background:var(--blue);color:var(--white);border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;}
@@ -264,7 +265,7 @@ function renderCard(r) {
       </div>
       <div class="edit-row">
         <div class="edit-label">備註</div>
-        <input class="edit-input" id="edit-note-${r.id}" value="${r.note||''}" placeholder="處理說明">
+        <textarea class="edit-input" id="edit-note-${r.id}" rows="4" placeholder="處理說明">${r.note||''}</textarea>
       </div>
       <div class="action-btns">
         <button class="save-btn" data-action="save" data-rid="${r.id}">儲存更新</button>
