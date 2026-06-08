@@ -162,29 +162,48 @@ function enterMain() {
   loadRequests();
 }
 
+const REMEMBER_KEY = 'yx_admin_remember_login';
+const REMEMBER_UNTIL_KEY = 'yx_admin_remember_until';
+const REMEMBER_DAYS = 365;
+
+function rememberThisDevice() {
+  const until = Date.now() + REMEMBER_DAYS * 24 * 60 * 60 * 1000;
+  localStorage.setItem(REMEMBER_KEY, '1');
+  localStorage.setItem(REMEMBER_UNTIL_KEY, String(until));
+}
+
+function isDeviceRemembered() {
+  const remembered = localStorage.getItem(REMEMBER_KEY) === '1';
+  const until = Number(localStorage.getItem(REMEMBER_UNTIL_KEY) || '0');
+  return remembered && until > Date.now();
+}
+
+function clearRememberedDevice() {
+  localStorage.removeItem(REMEMBER_KEY);
+  localStorage.removeItem(REMEMBER_UNTIL_KEY);
+}
+
 function initGoogleAuth() {
+  // 主畫面 App / PWA 模式下，Google 靜默登入常常不穩定。
+  // 因此這裡改成：這台設備已記住且未過期，就直接進後台。
+  if (isDeviceRemembered()) {
+    enterMain();
+    return;
+  }
+
+  clearRememberedDevice();
+
   const client = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: 'https://www.googleapis.com/auth/userinfo.profile',
     callback: (resp) => {
-      if (resp.error) {
-        // 靜默登入失敗時，不跳錯誤；只回到登入畫面讓使用者手動登入。
-        document.getElementById('screen-login').style.display = 'flex';
-        document.getElementById('screen-main').style.display = 'none';
-        return;
-      }
+      if (resp.error) { showToast('登入失敗'); return; }
       accessToken = resp.access_token;
-      localStorage.setItem('yx_admin_remember_login', '1');
+      rememberThisDevice();
       enterMain();
     },
   });
   window._tokenClient = client;
-
-  // 如果這台設備曾經登入過，嘗試靜默取得 token。
-  // 注意：Google token 不會永久保存；若瀏覽器清除資料、Token 過期、或 Google 要求重新驗證，仍會回到登入頁。
-  if (localStorage.getItem('yx_admin_remember_login') === '1') {
-    client.requestAccessToken({ prompt: '' });
-  }
 }
 
 function requestLogin() {
