@@ -356,7 +356,13 @@ function selectUrgent(val) {
 // ── PHOTOS ──
 function handlePhotos(input) {
   const files = Array.from(input.files);
-  photoFiles = [...photoFiles, ...files];
+  const combined = [...photoFiles, ...files];
+  if (combined.length > 10) {
+    showToast('最多上傳 10 張照片');
+    photoFiles = combined.slice(0, 10);
+  } else {
+    photoFiles = combined;
+  }
   renderPhotoPreviews();
 }
 
