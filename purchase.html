@@ -232,7 +232,6 @@
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzuw4pafQ2asp8X5ijR9v63xZ23IwKJQnzRfoHGaiJsRs3D4P8nsNsV5hyzCia7GBMf/exec';
 const CLIENT_ID = '448769511635-rpi3t0vtbqn104d2eut76aq1uqdvataq.apps.googleusercontent.com';
-const DRIVE_FOLDER_ID = '1ghH3208uA0S28bEQEON_fK4zjEO56jND';
 
 let accessToken = null;
 let currentUser = null;
@@ -240,7 +239,6 @@ let formType = null;
 let isUrgent = false;
 let photoFiles = [];
 
-// ── AUTH ──
 const REMEMBER_KEY = 'yx_request_remember_login';
 const REMEMBER_UNTIL_KEY = 'yx_request_remember_until';
 const REMEMBER_NAME_KEY = 'yx_request_user_name';
@@ -279,6 +277,7 @@ function enterForm() {
   if (displayName && !document.getElementById('field-name').value) {
     document.getElementById('field-name').value = displayName;
   }
+
   document.getElementById('field-date').value = new Date().toISOString().split('T')[0];
   selectUrgent(false);
 }
@@ -296,27 +295,12 @@ async function finishLogin(resp) {
 }
 
 function initGoogleAuth() {
-  // 主畫面 App / PWA 模式下，Google 靜默登入常常不穩定。
-  // 因此這裡改成：這台設備已記住且未過期，就直接進申請頁。
-if (isDeviceRemembered()) {
+  if (isDeviceRemembered()) {
     currentUser = {
       name: localStorage.getItem(REMEMBER_NAME_KEY) || '',
       email: localStorage.getItem(REMEMBER_EMAIL_KEY) || ''
     };
     enterForm();
-    // 靜默取得 token，讓照片上傳可以用
-    setTimeout(() => {
-      if (window._tokenClient) {
-        window._tokenClient = google.accounts.oauth2.initTokenClient({
-          client_id: CLIENT_ID,
-          scope: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/drive.file',
-          callback: async (resp) => {
-            if (!resp.error) accessToken = resp.access_token;
-          },
-        });
-        window._tokenClient.requestAccessToken({ prompt: '' });
-      }
-    }, 1000);
     return;
   }
 
@@ -324,9 +308,12 @@ if (isDeviceRemembered()) {
 
   const client = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/drive.file',
+    scope: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
     callback: async (resp) => {
-      if (resp.error) { showToast('登入失敗'); return; }
+      if (resp.error) {
+        showToast('登入失敗');
+        return;
+      }
 
       try {
         await finishLogin(resp);
@@ -335,47 +322,66 @@ if (isDeviceRemembered()) {
       }
     },
   });
+
   window._tokenClient = client;
 }
 
 function requestLogin() {
-  if (window._tokenClient) window._tokenClient.requestAccessToken({ prompt: 'consent' });
+  if (window._tokenClient) {
+    window._tokenClient.requestAccessToken({ prompt: 'consent' });
+  }
 }
 
 window.addEventListener('load', () => {
-  if (window.google) initGoogleAuth();
-  else document.querySelector('script[src*="gsi"]').addEventListener('load', initGoogleAuth);
+  if (window.google) {
+    initGoogleAuth();
+  } else {
+    document.querySelector('script[src*="gsi"]').addEventListener('load', initGoogleAuth);
+  }
 });
 
-// ── TYPE SELECT ──
 function selectType(type) {
   formType = type;
-  document.getElementById('btn-purchase').className = 'type-btn' + (type === 'purchase' ? ' selected-purchase' : '');
-  document.getElementById('btn-repair').className = 'type-btn' + (type === 'repair' ? ' selected-repair' : '');
-  document.getElementById('purchase-fields').style.display = type === 'purchase' ? 'block' : 'none';
-  document.getElementById('repair-fields').style.display = type === 'repair' ? 'block' : 'none';
+
+  document.getElementById('btn-purchase').className =
+    'type-btn' + (type === 'purchase' ? ' selected-purchase' : '');
+
+  document.getElementById('btn-repair').className =
+    'type-btn' + (type === 'repair' ? ' selected-repair' : '');
+
+  document.getElementById('purchase-fields').style.display =
+    type === 'purchase' ? 'block' : 'none';
+
+  document.getElementById('repair-fields').style.display =
+    type === 'repair' ? 'block' : 'none';
+
   document.getElementById('form-body').style.display = 'block';
   document.getElementById('submit-bar').style.display = 'block';
+
   checkReady();
 }
 
-// ── URGENT ──
 function selectUrgent(val) {
   isUrgent = val;
-  document.getElementById('urgent-yes').className = 'urgent-btn' + (val ? ' selected-yes' : '');
-  document.getElementById('urgent-no').className = 'urgent-btn' + (!val ? ' selected-no' : '');
+
+  document.getElementById('urgent-yes').className =
+    'urgent-btn' + (val ? ' selected-yes' : '');
+
+  document.getElementById('urgent-no').className =
+    'urgent-btn' + (!val ? ' selected-no' : '');
 }
 
-// ── PHOTOS ──
 function handlePhotos(input) {
   const files = Array.from(input.files);
   const combined = [...photoFiles, ...files];
+
   if (combined.length > 10) {
     showToast('最多上傳 10 張照片');
     photoFiles = combined.slice(0, 10);
   } else {
     photoFiles = combined;
   }
+
   renderPhotoPreviews();
 }
 
@@ -387,6 +393,7 @@ function removePhoto(idx) {
 function renderPhotoPreviews() {
   const wrap = document.getElementById('photo-preview-wrap');
   const area = document.getElementById('photo-upload-area');
+
   wrap.innerHTML = photoFiles.map((f, i) => {
     const url = URL.createObjectURL(f);
     return `<div class="photo-preview-item">
@@ -394,15 +401,17 @@ function renderPhotoPreviews() {
       <button class="photo-preview-remove" onclick="removePhoto(${i})">✕</button>
     </div>`;
   }).join('');
+
   area.className = 'photo-upload-area' + (photoFiles.length > 0 ? ' has-photo' : '');
 }
 
-// ── VALIDATE ──
 function checkReady() {
   const dept = document.getElementById('field-dept').value;
   const name = document.getElementById('field-name').value.trim();
   const date = document.getElementById('field-date').value;
+
   let typeOk = false;
+
   if (formType === 'purchase') {
     const product = document.getElementById('field-product').value.trim();
     const qty = document.getElementById('field-qty').value;
@@ -413,62 +422,46 @@ function checkReady() {
     const situation = document.getElementById('field-situation').value.trim();
     typeOk = equip && situation;
   }
+
   document.getElementById('submit-btn').disabled = !(dept && name && date && typeOk);
 }
 
-// ── UPLOAD PHOTO ──
-async function uploadPhoto(file, fileName) {
-  const metadata = { name: fileName, parents: [DRIVE_FOLDER_ID], mimeType: file.type || 'image/jpeg' };
-  const form = new FormData();
-  form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-  form.append('file', file);
-  const res = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', {
-    method: 'POST', headers: { Authorization: 'Bearer ' + accessToken }, body: form,
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = reader.result;
+      const base64 = String(result).split(',')[1];
+
+      resolve({
+        fileName: file.name || 'photo.jpg',
+        mimeType: file.type || 'image/jpeg',
+        base64: base64
+      });
+    };
+
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
   });
-  const json = await res.json();
-  if (!json.id) throw new Error('照片上傳失敗');
-  await fetch('https://www.googleapis.com/drive/v3/files/' + json.id + '/permissions', {
-    method: 'POST',
-    headers: { Authorization: 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ role: 'reader', type: 'anyone' }),
-  });
-  return 'https://lh3.googleusercontent.com/d/' + json.id;
 }
 
-// ── SUBMIT ──
 async function submitForm() {
   const btn = document.getElementById('submit-btn');
   btn.disabled = true;
-  btn.textContent = '上傳中...';
+  btn.textContent = '送出中...';
 
   try {
-if (photoFiles.length > 0 && !accessToken) {
-  showToast('照片上傳需要授權 Google Drive，請稍候...');
-  btn.disabled = false;
-  btn.textContent = '送出申請';
-  // 初始化並立即要求授權
-  window._tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/drive.file',
-    callback: async (resp) => {
-      if (!resp.error) {
-        accessToken = resp.access_token;
-        showToast('授權成功，請再按一次送出');
-      }
-    },
-  });
-  window._tokenClient.requestAccessToken({ prompt: '' });
-  return;
-}
+    const photos = [];
 
-    const urls = [];
     for (let i = 0; i < photoFiles.length; i++) {
-      showToast('上傳照片 ' + (i+1) + '/' + photoFiles.length + '...');
-      const url = await uploadPhoto(photoFiles[i], '申請_' + Date.now() + '_' + i + '.jpg');
-      urls.push(url);
+      showToast('處理照片 ' + (i + 1) + '/' + photoFiles.length + '...');
+      const photoData = await fileToBase64(photoFiles[i]);
+      photos.push(photoData);
     }
 
     showToast('送出申請中...');
+
     const payload = {
       action: 'submitRequest',
       type: formType,
@@ -477,21 +470,39 @@ if (photoFiles.length > 0 && !accessToken) {
       name: document.getElementById('field-name').value.trim(),
       date: document.getElementById('field-date').value.substring(0, 10),
       urgent: isUrgent ? '緊急' : '一般',
-      product: formType === 'purchase' ? document.getElementById('field-product').value.trim() : document.getElementById('field-equipment').value.trim(),
-      spec: formType === 'purchase' ? (document.getElementById('field-spec').value.trim() || '') : '',
-      qty: formType === 'purchase' ? document.getElementById('field-qty').value : '',
-      reason: formType === 'purchase' ? document.getElementById('field-reason').value.trim() : document.getElementById('field-situation').value.trim(),
-      photoUrls: urls,
+      product: formType === 'purchase'
+        ? document.getElementById('field-product').value.trim()
+        : document.getElementById('field-equipment').value.trim(),
+      spec: formType === 'purchase'
+        ? (document.getElementById('field-spec').value.trim() || '')
+        : '',
+      qty: formType === 'purchase'
+        ? document.getElementById('field-qty').value
+        : '',
+      reason: formType === 'purchase'
+        ? document.getElementById('field-reason').value.trim()
+        : document.getElementById('field-situation').value.trim(),
+      photos: photos
     };
 
-    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
     const json = await res.json();
-    if (!json.ok) throw new Error(json.error);
+
+    if (!json.ok) {
+      throw new Error(json.error || '送出失敗');
+    }
 
     const doneEl = document.getElementById('done-sub');
-    doneEl.textContent = (formType === 'purchase' ? '請購' : '維修') + '申請已送出，總務將收到通知';
+    doneEl.textContent =
+      (formType === 'purchase' ? '請購' : '維修') + '申請已送出，總務將收到通知';
+
     document.getElementById('screen-form').style.display = 'none';
     document.getElementById('screen-done').style.display = 'flex';
+
   } catch(e) {
     showToast('送出失敗，請重試');
     btn.disabled = false;
@@ -503,19 +514,27 @@ function resetForm() {
   formType = null;
   photoFiles = [];
   isUrgent = false;
+
   document.getElementById('btn-purchase').className = 'type-btn';
   document.getElementById('btn-repair').className = 'type-btn';
+
   document.getElementById('form-body').style.display = 'none';
   document.getElementById('submit-bar').style.display = 'none';
+
   document.getElementById('field-product').value = '';
   document.getElementById('field-spec').value = '';
   document.getElementById('field-qty').value = '';
   document.getElementById('field-reason').value = '';
   document.getElementById('field-equipment').value = '';
   document.getElementById('field-situation').value = '';
+
   document.getElementById('photo-preview-wrap').innerHTML = '';
+  document.getElementById('photo-upload-area').className = 'photo-upload-area';
+
   document.getElementById('field-date').value = new Date().toISOString().split('T')[0];
+
   selectUrgent(false);
+
   document.getElementById('screen-done').style.display = 'none';
   document.getElementById('screen-form').style.display = 'block';
 }
@@ -527,5 +546,3 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2200);
 }
 </script>
-</body>
-</html>
