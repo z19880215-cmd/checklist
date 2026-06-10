@@ -442,13 +442,24 @@ async function submitForm() {
   btn.textContent = '上傳中...';
 
   try {
-    if (photoFiles.length > 0 && !accessToken) {
-      showToast('上傳照片需要重新授權');
-      btn.disabled = false;
-      btn.textContent = '送出申請';
-      requestLogin();
-      return;
-    }
+if (photoFiles.length > 0 && !accessToken) {
+  showToast('照片上傳需要授權 Google Drive，請稍候...');
+  btn.disabled = false;
+  btn.textContent = '送出申請';
+  // 初始化並立即要求授權
+  window._tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/drive.file',
+    callback: async (resp) => {
+      if (!resp.error) {
+        accessToken = resp.access_token;
+        showToast('授權成功，請再按一次送出');
+      }
+    },
+  });
+  window._tokenClient.requestAccessToken({ prompt: '' });
+  return;
+}
 
     const urls = [];
     for (let i = 0; i < photoFiles.length; i++) {
