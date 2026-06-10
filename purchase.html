@@ -298,12 +298,25 @@ async function finishLogin(resp) {
 function initGoogleAuth() {
   // 主畫面 App / PWA 模式下，Google 靜默登入常常不穩定。
   // 因此這裡改成：這台設備已記住且未過期，就直接進申請頁。
-  if (isDeviceRemembered()) {
+if (isDeviceRemembered()) {
     currentUser = {
       name: localStorage.getItem(REMEMBER_NAME_KEY) || '',
       email: localStorage.getItem(REMEMBER_EMAIL_KEY) || ''
     };
     enterForm();
+    // 靜默取得 token，讓照片上傳可以用
+    setTimeout(() => {
+      if (window._tokenClient) {
+        window._tokenClient = google.accounts.oauth2.initTokenClient({
+          client_id: CLIENT_ID,
+          scope: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/drive.file',
+          callback: async (resp) => {
+            if (!resp.error) accessToken = resp.access_token;
+          },
+        });
+        window._tokenClient.requestAccessToken({ prompt: '' });
+      }
+    }, 1000);
     return;
   }
 
