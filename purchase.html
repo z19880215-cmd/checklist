@@ -203,8 +203,8 @@
 
     <!-- 照片 -->
     <div class="form-card">
-      <div class="form-section-title">照片（選填）</div>
-      <input type="file" id="photo-input" accept="image/*" multiple style="display:none" onchange="handlePhotos(this)">
+      <div class="form-section-title">照片（選填）
+      </div><input type="file" id="photo-input" accept="image/*" multiple style="display:none" onchange="handlePhotos(this)" max="10">
       <div class="photo-upload-area" id="photo-upload-area" onclick="document.getElementById('photo-input').click()">
         <div class="photo-upload-icon">📷</div>
         <div class="photo-upload-label">點擊上傳照片</div>
