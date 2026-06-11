@@ -294,12 +294,31 @@ function initGoogleAuth() {
 }
 
 function requestLogin() {
-  if (window._tokenClient) window._tokenClient.requestAccessToken({ prompt: 'consent' });
+  if (!window.google || !google.accounts || !google.accounts.oauth2) {
+    showToast('Google 登入尚未載入，請重新整理');
+    return;
+  }
+
+  if (!window._tokenClient) {
+    initGoogleAuth();
+  }
+
+  if (window._tokenClient) {
+    window._tokenClient.requestAccessToken({ prompt: 'consent' });
+  } else {
+    showToast('登入初始化失敗，請重新整理');
+  }
 }
 
 window.addEventListener('load', () => {
-  if (window.google) initGoogleAuth();
-  else document.querySelector('script[src*="gsi"]').addEventListener('load', initGoogleAuth);
+  const waitGoogle = setInterval(() => {
+    if (window.google && google.accounts && google.accounts.oauth2) {
+      clearInterval(waitGoogle);
+      initGoogleAuth();
+    }
+  }, 300);
+
+  setTimeout(() => clearInterval(waitGoogle), 10000);
 });
 
 async function loadRequests() {
