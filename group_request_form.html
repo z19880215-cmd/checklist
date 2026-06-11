@@ -147,22 +147,9 @@
           <option value="">請先選擇品牌</option>
         </select>
       </div>
-      <div class="form-row-2">
-        <div class="form-row">
-          <div class="form-label">部門 <span class="required">*</span></div>
-          <select class="form-select" id="field-dept" onchange="checkReady()">
-            <option value="">請選擇</option>
-            <option>生產部</option>
-            <option>甜點部</option>
-            <option>倉儲/總務/司機</option>
-            <option>採購部</option>
-            <option>總部</option>
-          </select>
-        </div>
-        <div class="form-row">
-          <div class="form-label">姓名 <span class="required">*</span></div>
-          <input class="form-input" id="field-name" type="text" placeholder="您的姓名" oninput="checkReady()">
-        </div>
+      <div class="form-row">
+        <div class="form-label">姓名 <span class="required">*</span></div>
+        <input class="form-input" id="field-name" type="text" placeholder="您的姓名" oninput="checkReady()">
       </div>
       <div class="form-row">
         <div class="form-label">日期 <span class="required">*</span></div>
@@ -462,7 +449,6 @@ function renderPhotoPreviews() {
 function checkReady() {
   const brand = document.getElementById('field-brand').value;
   const store = document.getElementById('field-store').value;
-  const dept = document.getElementById('field-dept').value;
   const name = document.getElementById('field-name').value.trim();
   const date = document.getElementById('field-date').value;
 
@@ -479,7 +465,7 @@ function checkReady() {
     typeOk = equip && situation;
   }
 
-  document.getElementById('submit-btn').disabled = !(brand && store && dept && name && date && typeOk);
+  document.getElementById('submit-btn').disabled = !(brand && store && name && date && typeOk);
 }
 
 function fileToBase64(file) {
@@ -553,7 +539,6 @@ async function submitForm() {
       typeLabel: formType === 'purchase' ? '請購' : '維修',
       brand: document.getElementById('field-brand').value,
       store: document.getElementById('field-store').value,
-      dept: document.getElementById('field-dept').value,
       name: document.getElementById('field-name').value.trim(),
       date: document.getElementById('field-date').value.substring(0, 10),
       urgent: isUrgent ? '緊急' : '一般',
