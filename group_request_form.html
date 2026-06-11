@@ -232,11 +232,7 @@
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbx51zVQF-lsk28jlIJJNbaBre5zwiFLiXgxiqbADSTDhk1P6jh3APMr_N6R7btxypQ/exec';
 const CLIENT_ID = '448769511635-rpi3t0vtbqn104d2eut76aq1uqdvataq.apps.googleusercontent.com';
 
-const BRAND_STORE_CONFIG = {
-  "品牌A": ["店別A01", "店別A02", "店別A03"],
-  "品牌B": ["店別B01", "店別B02"],
-  "品牌C": ["店別C01"]
-};
+let BRAND_STORE_CONFIG = {};
 
 
 let accessToken = null;
@@ -252,13 +248,32 @@ const REMEMBER_EMAIL_KEY = 'yx_request_user_email';
 const REMEMBER_DAYS = 365;
 
 
-function initBrandOptions() {
+async function loadBrandConfig() {
+  try {
+    const res = await fetch(GAS_URL + '?action=loadBrandConfig');
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || '讀取品牌設定失敗');
+    BRAND_STORE_CONFIG = json.config || {};
+    return true;
+  } catch (e) {
+    showToast('品牌設定載入失敗');
+    BRAND_STORE_CONFIG = {};
+    return false;
+  }
+}
+
+async function initBrandOptions() {
   const brandSelect = document.getElementById('field-brand');
   if (!brandSelect) return;
 
+  brandSelect.innerHTML = '<option value="">品牌載入中...</option>';
+  await loadBrandConfig();
+
   const current = brandSelect.value;
+  const brands = Object.keys(BRAND_STORE_CONFIG);
+
   brandSelect.innerHTML = '<option value="">請選擇品牌</option>' +
-    Object.keys(BRAND_STORE_CONFIG).map(brand => '<option value="' + escapeHtml(brand) + '">' + escapeHtml(brand) + '</option>').join('');
+    brands.map(brand => '<option value="' + escapeHtml(brand) + '">' + escapeHtml(brand) + '</option>').join('');
 
   if (current && BRAND_STORE_CONFIG[current]) brandSelect.value = current;
   handleBrandChange();
