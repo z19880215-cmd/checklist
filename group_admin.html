@@ -194,12 +194,16 @@ function escapeHtml(value) {
 
 function renderBrandSelect() {
   const grid = document.getElementById('brand-grid');
+
   grid.innerHTML = Object.keys(BRAND_STORE_CONFIG).map(brand => {
     const count = BRAND_STORE_CONFIG[brand].length;
-    return '<button class="brand-card" onclick="selectBrand(\\'' + escapeJs(brand) + '\\')">'
-      + '<div class="brand-card-name">' + escapeHtml(brand) + '</div>'
-      + '<div class="brand-card-sub">' + count + ' 個店別</div>'
-      + '</button>';
+
+    return `
+      <button class="brand-card" data-brand="${escapeHtml(brand)}">
+        <div class="brand-card-name">${escapeHtml(brand)}</div>
+        <div class="brand-card-sub">${count} 個店別</div>
+      </button>
+    `;
   }).join('');
 }
 
@@ -480,6 +484,11 @@ function renderCard(r) {
 }
 
 document.addEventListener('click', function(e) {
+  const brandBtn = e.target.closest('.brand-card');
+  if (brandBtn) {
+  selectBrand(brandBtn.dataset.brand);
+  return;
+  }
   const toggleEl = e.target.closest('[data-action="toggle"]');
   if (toggleEl) { toggleCard(toggleEl.dataset.rid); return; }
   const saveEl = e.target.closest('[data-action="save"]');
