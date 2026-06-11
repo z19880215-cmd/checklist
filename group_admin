@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#111111">
+<title>集團平台 採購/總務後台</title>
+<script src="https://accounts.google.com/gsi/client" async></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+  :root{
+    --black:#111111;--white:#FAFAF8;--gray-100:#F2F1EE;
+    --gray-200:#E0DED9;--gray-400:#A8A49D;--gray-600:#6B6760;
+    --orange:#E8561F;--orange-light:#FEF0EA;
+    --blue:#1A5FBF;--blue-light:#EAF0FB;
+    --green:#1A7F5A;--green-light:#EAF7F1;
+    --red:#C0392B;--red-light:#FDEEEC;
+    --yellow:#E8A020;--yellow-light:#FEF6E7;
+    --radius:14px;--radius-sm:8px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+  body{font-family:'Noto Sans TC',sans-serif;background:var(--gray-100);color:var(--black);min-height:100vh;max-width:480px;margin:0 auto;}
+  .login-screen{min-height:100vh;background:var(--black);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 32px;text-align:center;}
+  .brand-dot{width:48px;height:48px;border-radius:50%;background:var(--orange);margin:0 auto 24px;}
+  .login-title{color:var(--white);font-size:22px;font-weight:700;margin-bottom:8px;}
+  .login-sub{color:var(--gray-400);font-size:14px;margin-bottom:40px;}
+  .google-btn{display:inline-flex;align-items:center;gap:10px;background:var(--white);color:var(--black);border:none;border-radius:var(--radius);padding:14px 24px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;}
+  .admin-header{background:var(--white);padding:52px 24px 20px;border-bottom:1px solid var(--gray-200);}
+  .admin-header-row{display:flex;align-items:flex-start;justify-content:space-between;}
+  .admin-title{font-size:22px;font-weight:700;}
+  .admin-sub{font-size:13px;color:var(--gray-600);margin-top:3px;}
+  .refresh-btn{background:var(--gray-100);border:none;border-radius:var(--radius-sm);padding:8px 14px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;color:var(--gray-600);}
+  .stats-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:16px;}
+  .stat-card{background:var(--white);border-radius:var(--radius-sm);padding:14px 12px;text-align:center;}
+  .stat-num{font-size:24px;font-weight:700;}
+  .stat-num.orange{color:var(--orange);}
+  .stat-num.green{color:var(--green);}
+  .stat-num.blue{color:var(--blue);}
+  .stat-lbl{font-size:11px;color:var(--gray-600);margin-top:2px;}
+  .filter-bar{display:flex;gap:8px;padding:0 16px 12px;overflow-x:auto;}
+  .filter-btn{flex-shrink:0;padding:7px 16px;border-radius:20px;border:1.5px solid var(--gray-200);background:var(--white);font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;color:var(--gray-600);}
+  .filter-btn.active{background:var(--black);border-color:var(--black);color:var(--white);}
+  .cards-list{padding:0 16px 32px;display:flex;flex-direction:column;gap:10px;}
+  .req-card{background:var(--white);border-radius:var(--radius);overflow:hidden;border:2px solid transparent;}
+  .req-card.pending{border-color:var(--yellow);}
+  .req-card.processing{border-color:var(--blue);}
+  .req-card.done{border-color:var(--green);}
+  .req-card-header{display:flex;align-items:center;gap:10px;padding:14px 16px;cursor:pointer;}
+  .type-badge{font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;flex-shrink:0;}
+  .type-badge.purchase{background:var(--blue-light);color:var(--blue);}
+  .type-badge.repair{background:var(--orange-light);color:var(--orange);}
+  .urgent-badge{font-size:10px;font-weight:700;padding:3px 8px;border-radius:20px;background:var(--red);color:var(--white);flex-shrink:0;}
+  .req-info{flex:1;min-width:0;}
+  .req-info-main{font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .req-info-sub{font-size:12px;color:var(--gray-600);margin-top:1px;}
+  .status-pill{font-size:11px;font-weight:700;padding:5px 10px;border-radius:20px;flex-shrink:0;}
+  .status-pill.pending{background:var(--yellow-light);color:var(--yellow);}
+  .status-pill.processing{background:var(--blue-light);color:var(--blue);}
+  .status-pill.done{background:var(--green-light);color:var(--green);}
+  .chev{transition:transform 0.2s;flex-shrink:0;}
+  .expanded .chev{transform:rotate(180deg);}
+  .req-card-body{padding:16px;}
+  .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+  .detail-item{background:var(--gray-100);border-radius:var(--radius-sm);padding:10px 12px;}
+  .detail-item.full{grid-column:1/-1;}
+  .detail-label{font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;}
+  .detail-value{font-size:13px;font-weight:500;color:var(--black);}
+  .photos-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+  .photo-thumb{width:80px;height:80px;object-fit:cover;border-radius:var(--radius-sm);cursor:pointer;}
+  .edit-section{border-top:1px solid var(--gray-200);padding-top:14px;}
+  .edit-title{font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;}
+  .edit-row{margin-bottom:10px;}
+  .edit-label{font-size:12px;font-weight:700;color:var(--gray-600);margin-bottom:5px;}
+  .edit-input,.edit-select{width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;background:var(--gray-100);color:var(--black);outline:none;}
+  .edit-input:focus,.edit-select:focus{border-color:var(--blue);background:var(--white);}
+  textarea.edit-input{min-height:110px;line-height:1.55;resize:vertical;white-space:pre-wrap;}
+  .edit-row-2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+  .action-btns{display:flex;flex-direction:column;gap:8px;margin-top:12px;}
+  .save-btn{width:100%;padding:13px;background:var(--blue);color:var(--white);border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;}
+  .done-btn{width:100%;padding:13px;background:var(--green);color:var(--white);border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;}
+  .already-done-label{text-align:center;font-size:13px;font-weight:700;color:var(--green);padding:8px 0;}
+  .lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:100;align-items:center;justify-content:center;}
+  .lightbox.open{display:flex;}
+  .lightbox img{max-width:95%;max-height:90vh;object-fit:contain;border-radius:var(--radius-sm);}
+  .lb-close{position:absolute;top:20px;right:20px;background:rgba(255,255,255,0.2);border:none;color:white;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .toast{position:fixed;bottom:32px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--black);color:var(--white);padding:12px 24px;border-radius:100px;font-size:13px;font-weight:500;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1);z-index:999;white-space:nowrap;}
+  .toast.show{transform:translateX(-50%) translateY(0);}
+  .empty-state{padding:48px 24px;text-align:center;color:var(--gray-400);font-size:14px;}
+
+  .brand-select-screen{min-height:100vh;background:var(--gray-100);padding:52px 16px 32px;}
+  .brand-select-header{background:var(--white);border-radius:var(--radius);padding:24px;margin-bottom:16px;}
+  .brand-select-title{font-size:24px;font-weight:700;margin-bottom:6px;}
+  .brand-select-sub{font-size:13px;color:var(--gray-600);}
+  .brand-grid{display:grid;grid-template-columns:1fr;gap:10px;}
+  .brand-card{background:var(--white);border:2px solid var(--gray-200);border-radius:var(--radius);padding:18px;text-align:left;font-family:inherit;cursor:pointer;}
+  .brand-card:active{transform:scale(0.98);}
+  .brand-card-name{font-size:17px;font-weight:700;color:var(--black);}
+  .brand-card-sub{font-size:12px;color:var(--gray-600);margin-top:4px;}
+  .back-brand-btn{background:var(--black);color:var(--white);border:none;border-radius:var(--radius-sm);padding:8px 12px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;margin-right:8px;}
+  .group-title{font-size:12px;font-weight:700;color:var(--gray-600);padding:8px 4px 2px;}
+  .group-title.urgent{color:var(--red);}
+  .store-title{font-size:13px;font-weight:700;color:var(--black);padding:8px 4px 0;border-top:1px solid var(--gray-200);margin-top:4px;}
+
+</style>
+</head>
+<body>
+
+<div id="screen-login" class="login-screen">
+  <div class="brand-dot"></div>
+  <div class="login-title">總務後台</div>
+  <div class="login-sub">請購／維修申請管理</div>
+  <button class="google-btn" onclick="requestLogin()">
+    <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+    使用 Google 帳號登入
+  </button>
+</div>
+
+
+<div id="screen-brand" class="brand-select-screen" style="display:none;">
+  <div class="brand-select-header">
+    <div class="brand-select-title">選擇品牌</div>
+    <div class="brand-select-sub">請先選擇品牌，再查看待處理、處理中與已完成單據</div>
+  </div>
+  <div class="brand-grid" id="brand-grid"></div>
+</div>
+
+<div id="screen-main" style="display:none;">
+  <div class="admin-header">
+    <div class="admin-header-row">
+      <div>
+        <button class="back-brand-btn" onclick="backToBrandSelect()">品牌</button><div class="admin-title" id="admin-title">請購／維修管理</div>
+        <div class="admin-sub" id="admin-date"></div>
+      </div>
+      <button class="refresh-btn" onclick="loadRequests()">↻ 重新整理</button>
+    </div>
+  </div>
+  <div class="stats-bar">
+    <div class="stat-card"><div class="stat-num orange" id="stat-pending">0</div><div class="stat-lbl">待處理</div></div>
+    <div class="stat-card"><div class="stat-num blue" id="stat-processing">0</div><div class="stat-lbl">處理中</div></div>
+    <div class="stat-card"><div class="stat-num green" id="stat-done">0</div><div class="stat-lbl">已完成</div></div>
+  </div>
+  <div class="filter-bar">
+    <button class="filter-btn active" onclick="setFilter('all',this)">全部</button>
+    <button class="filter-btn" onclick="setFilter('pending',this)">待處理</button>
+    <button class="filter-btn" onclick="setFilter('processing',this)">處理中</button>
+    <button class="filter-btn" onclick="setFilter('done',this)">已完成</button>
+    <button class="filter-btn" onclick="setFilter('purchase',this)">請購</button>
+    <button class="filter-btn" onclick="setFilter('repair',this)">維修</button>
+  </div>
+  <div class="cards-list" id="cards-list"></div>
+</div>
+
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <button class="lb-close" onclick="closeLightbox()">✕</button>
+  <img id="lb-img" src="" alt="">
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbzuw4pafQ2asp8X5ijR9v63xZ23IwKJQnzRfoHGaiJsRs3D4P8nsNsV5hyzCia7GBMf/exec';
+const CLIENT_ID = '448769511635-rpi3t0vtbqn104d2eut76aq1uqdvataq.apps.googleusercontent.com';
+
+const BRAND_STORE_CONFIG = {
+  "品牌A": ["店別A01", "店別A02", "店別A03"],
+  "品牌B": ["店別B01", "店別B02"],
+  "品牌C": ["店別C01"]
+};
+
+
+let accessToken = null;
+let requests = [];
+let filter = 'all';
+let selectedBrand = '';
+
+function cleanDate(d) {
+  if (!d) return '';
+  const s = String(d);
+  if (s.includes('T')) {
+    try {
+      const dt = new Date(s);
+      const tw = new Date(dt.getTime() + 8 * 60 * 60 * 1000);
+      return tw.getUTCFullYear() + '/' + String(tw.getUTCMonth()+1).padStart(2,'0') + '/' + String(tw.getUTCDate()).padStart(2,'0');
+    } catch(e) { return s; }
+  }
+  return s.replace(/-/g, '/');
+}
+
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, function(m) {
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]);
+  });
+}
+
+function renderBrandSelect() {
+  const grid = document.getElementById('brand-grid');
+  grid.innerHTML = Object.keys(BRAND_STORE_CONFIG).map(brand => {
+    const count = BRAND_STORE_CONFIG[brand].length;
+    return '<button class="brand-card" onclick="selectBrand(\\'' + escapeJs(brand) + '\\')">'
+      + '<div class="brand-card-name">' + escapeHtml(brand) + '</div>'
+      + '<div class="brand-card-sub">' + count + ' 個店別</div>'
+      + '</button>';
+  }).join('');
+}
+
+function escapeJs(value) {
+  return String(value ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+function selectBrand(brand) {
+  selectedBrand = brand;
+  filter = 'all';
+  document.querySelectorAll('.filter-btn').forEach((b, i) => b.classList.toggle('active', i === 0));
+  document.getElementById('screen-brand').style.display = 'none';
+  document.getElementById('screen-main').style.display = 'block';
+  document.getElementById('admin-title').textContent = brand + '｜請購／維修管理';
+  loadRequests();
+}
+
+function backToBrandSelect() {
+  selectedBrand = '';
+  document.getElementById('screen-main').style.display = 'none';
+  document.getElementById('screen-brand').style.display = 'block';
+  renderBrandSelect();
+}
+
+function sortRequests(list) {
+  return [...list].sort((a, b) => {
+    const ua = a.urgent === '緊急' ? 0 : 1;
+    const ub = b.urgent === '緊急' ? 0 : 1;
+    if (ua !== ub) return ua - ub;
+
+    const storeCompare = String(a.store || '').localeCompare(String(b.store || ''), 'zh-Hant');
+    if (storeCompare !== 0) return storeCompare;
+
+    return Number(b.id || 0) - Number(a.id || 0);
+  });
+}
+
+function enterMain() {
+  document.getElementById('screen-login').style.display = 'none';
+  document.getElementById('screen-brand').style.display = 'block';
+  document.getElementById('screen-main').style.display = 'none';
+
+  const d = new Date();
+  document.getElementById('admin-date').textContent =
+    d.getFullYear() + '/' + String(d.getMonth()+1).padStart(2,'0') + '/' + String(d.getDate()).padStart(2,'0');
+
+  renderBrandSelect();
+}
+
+const REMEMBER_KEY = 'yx_admin_remember_login';
+const REMEMBER_UNTIL_KEY = 'yx_admin_remember_until';
+const REMEMBER_DAYS = 365;
+
+function rememberThisDevice() {
+  const until = Date.now() + REMEMBER_DAYS * 24 * 60 * 60 * 1000;
+  localStorage.setItem(REMEMBER_KEY, '1');
+  localStorage.setItem(REMEMBER_UNTIL_KEY, String(until));
+}
+
+function isDeviceRemembered() {
+  const remembered = localStorage.getItem(REMEMBER_KEY) === '1';
+  const until = Number(localStorage.getItem(REMEMBER_UNTIL_KEY) || '0');
+  return remembered && until > Date.now();
+}
+
+function clearRememberedDevice() {
+  localStorage.removeItem(REMEMBER_KEY);
+  localStorage.removeItem(REMEMBER_UNTIL_KEY);
+}
+
+function initGoogleAuth() {
+  // 主畫面 App / PWA 模式下，Google 靜默登入常常不穩定。
+  // 因此這裡改成：這台設備已記住且未過期，就直接進後台。
+  if (isDeviceRemembered()) {
+    enterMain();
+    return;
+  }
+
+  clearRememberedDevice();
+
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: 'https://www.googleapis.com/auth/userinfo.profile',
+    callback: (resp) => {
+      if (resp.error) { showToast('登入失敗'); return; }
+      accessToken = resp.access_token;
+      rememberThisDevice();
+      enterMain();
+    },
+  });
+  window._tokenClient = client;
+}
+
+function requestLogin() {
+  if (window._tokenClient) window._tokenClient.requestAccessToken({ prompt: 'consent' });
+}
+
+window.addEventListener('load', () => {
+  if (window.google) initGoogleAuth();
+  else document.querySelector('script[src*="gsi"]').addEventListener('load', initGoogleAuth);
+});
+
+async function loadRequests() {
+  if (!selectedBrand) return;
+  document.getElementById('cards-list').innerHTML = '<div class="empty-state">載入中...</div>';
+  try {
+    const res = await fetch(GAS_URL + '?action=loadRequests');
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error);
+    requests = json.requests;
+    renderAll();
+  } catch(e) {
+    showToast('載入失敗');
+    document.getElementById('cards-list').innerHTML = '<div class="empty-state">載入失敗，請重新整理</div>';
+  }
+}
+
+function setFilter(f, el) {
+  filter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderAll();
+}
+
+function renderAll() {
+  const brandRequests = requests.filter(r => r.brand === selectedBrand);
+
+  let filtered = brandRequests;
+  if (filter === 'purchase') filtered = brandRequests.filter(r => r.type === 'purchase');
+  else if (filter === 'repair') filtered = brandRequests.filter(r => r.type === 'repair');
+  else if (filter !== 'all') filtered = brandRequests.filter(r => getStatusClass(r.status) === filter);
+
+  const sorted = sortRequests(filtered);
+
+  document.getElementById('stat-pending').textContent = brandRequests.filter(r => getStatusClass(r.status) === 'pending').length;
+  document.getElementById('stat-processing').textContent = brandRequests.filter(r => getStatusClass(r.status) === 'processing').length;
+  document.getElementById('stat-done').textContent = brandRequests.filter(r => getStatusClass(r.status) === 'done').length;
+
+  if (sorted.length === 0) {
+    document.getElementById('cards-list').innerHTML = '<div class="empty-state">沒有紀錄</div>';
+    return;
+  }
+
+  let html = '';
+  let lastUrgentGroup = '';
+  let lastStore = '';
+
+  sorted.forEach(r => {
+    const urgentGroup = r.urgent === '緊急' ? '緊急' : '一般';
+    const store = r.store || '未指定門市';
+
+    if (urgentGroup !== lastUrgentGroup) {
+      html += '<div class="group-title ' + (urgentGroup === '緊急' ? 'urgent' : '') + '">【' + urgentGroup + '】</div>';
+      lastUrgentGroup = urgentGroup;
+      lastStore = '';
+    }
+
+    if (store !== lastStore) {
+      html += '<div class="store-title">' + escapeHtml(store) + '</div>';
+      lastStore = store;
+    }
+
+    html += renderCard(r);
+  });
+
+  document.getElementById('cards-list').innerHTML = html;
+}
+
+function getStatusClass(status) {
+  if (status === 'pending' || status === '待處理') return 'pending';
+  if (status === 'processing' || status === '處理中') return 'processing';
+  if (status === 'done' || status === '已完成') return 'done';
+  return 'pending';
+}
+
+function getStatusText(status) {
+  if (status === 'pending' || status === '待處理') return '待處理';
+  if (status === 'processing' || status === '處理中') return '處理中';
+  if (status === 'done' || status === '已完成') return '已完成';
+  return '待處理';
+}
+
+function renderCard(r) {
+  const expanded = r._expanded || false;
+  const statusClass = getStatusClass(r.status);
+  const statusText = getStatusText(r.status);
+  const photosHtml = (r.photoUrls || []).filter(Boolean).map(url =>
+    '<img class="photo-thumb" src="' + url + '" data-url="' + url + '" loading="lazy" referrerpolicy="no-referrer">'
+  ).join('');
+
+  const isDone = statusClass === 'done';
+  const editSection = !isDone ? `
+    <div class="edit-section">
+      <div class="edit-title">處理資訊</div>
+      <div class="edit-row">
+        <div class="edit-label">處理狀態</div>
+        <select class="edit-select" id="edit-status-${r.id}">
+          <option value="pending" ${statusClass==='pending'?'selected':''}>待處理</option>
+          <option value="processing" ${statusClass==='processing'?'selected':''}>處理中</option>
+        </select>
+      </div>
+      <div class="edit-row">
+        <div class="edit-label">處理人員</div>
+        <input class="edit-input" id="edit-handler-${r.id}" value="${r.handler||''}" placeholder="處理人員姓名">
+      </div>
+      <div class="edit-row-2">
+        <div class="edit-row">
+          <div class="edit-label">金額</div>
+          <input class="edit-input" id="edit-amount-${r.id}" value="${r.amount||''}" placeholder="0" type="number">
+        </div>
+        <div class="edit-row">
+          <div class="edit-label">廠商</div>
+          <input class="edit-input" id="edit-vendor-${r.id}" value="${r.vendor||''}" placeholder="廠商名稱">
+        </div>
+      </div>
+      <div class="edit-row">
+        <div class="edit-label">備註</div>
+        <textarea class="edit-input" id="edit-note-${r.id}" rows="4" placeholder="處理說明">${r.note||''}</textarea>
+      </div>
+      <div class="action-btns">
+        <button class="save-btn" data-action="save" data-rid="${r.id}">儲存更新</button>
+        <button class="done-btn" data-action="done" data-rid="${r.id}">✓ 完成請款</button>
+      </div>
+    </div>` : '<div class="already-done-label">✓ 已完成請款</div>'
+    + '<div class="detail-grid" style="margin-top:8px;">'
+    + (r.handler ? '<div class="detail-item"><div class="detail-label">處理人員</div><div class="detail-value">' + r.handler + '</div></div>' : '')
+    + (r.amount ? '<div class="detail-item"><div class="detail-label">金額</div><div class="detail-value">NT$ ' + r.amount + '</div></div>' : '')
+    + (r.vendor ? '<div class="detail-item"><div class="detail-label">廠商</div><div class="detail-value">' + r.vendor + '</div></div>' : '')
+    + (r.note ? '<div class="detail-item full"><div class="detail-label">備註</div><div class="detail-value">' + r.note + '</div></div>' : '')
+    + '</div>';
+
+  return '<div class="req-card ' + statusClass + '" id="card-' + r.id + '">'
+    + '<div class="req-card-header ' + (expanded ? 'expanded' : '') + '" data-action="toggle" data-rid="' + r.id + '">'
+    + '<span class="type-badge ' + r.type + '">' + (r.type === 'purchase' ? '🛒 請購' : '🔧 維修') + '</span>'
+    + (r.urgent === '緊急' ? '<span class="urgent-badge">緊急</span>' : '')
+    + '<div class="req-info">'
+    + '<div class="req-info-main">' + r.product + '</div>'
+    + '<div class="req-info-sub">' + (r.store || '') + ' · ' + r.dept + ' · ' + r.name + ' · ' + cleanDate(r.date) + '</div>'
+    + '</div>'
+    + '<span class="status-pill ' + statusClass + '">' + statusText + '</span>'
+    + '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="#A8A49D" stroke-width="2" width="18" height="18"><path d="M6 9l6 6 6-6"/></svg>'
+    + '</div>'
+    + (expanded ? '<div class="req-card-body">'
+      + '<div class="detail-grid">'
+      + '<div class="detail-item"><div class="detail-label">品牌</div><div class="detail-value">' + (r.brand || '') + '</div></div>'
+      + '<div class="detail-item"><div class="detail-label">門市</div><div class="detail-value">' + (r.store || '') + '</div></div>'
+      + '<div class="detail-item"><div class="detail-label">部門</div><div class="detail-value">' + r.dept + '</div></div>'
+      + '<div class="detail-item"><div class="detail-label">申請人</div><div class="detail-value">' + r.name + '</div></div>'
+      + '<div class="detail-item"><div class="detail-label">日期</div><div class="detail-value">' + cleanDate(r.date) + '</div></div>'
+      + '<div class="detail-item"><div class="detail-label">緊急程度</div><div class="detail-value">' + r.urgent + '</div></div>'
+      + (r.spec ? '<div class="detail-item"><div class="detail-label">規格</div><div class="detail-value">' + r.spec + '</div></div>' : '')
+      + (r.qty ? '<div class="detail-item"><div class="detail-label">數量</div><div class="detail-value">' + r.qty + '</div></div>' : '')
+      + '<div class="detail-item full"><div class="detail-label">' + (r.type === 'purchase' ? '請購原因' : '狀況說明') + '</div><div class="detail-value">' + r.reason + '</div></div>'
+      + '</div>'
+      + (photosHtml ? '<div class="photos-row">' + photosHtml + '</div>' : '')
+      + editSection
+      + '</div>' : '')
+    + '</div>';
+}
+
+document.addEventListener('click', function(e) {
+  const toggleEl = e.target.closest('[data-action="toggle"]');
+  if (toggleEl) { toggleCard(toggleEl.dataset.rid); return; }
+  const saveEl = e.target.closest('[data-action="save"]');
+  if (saveEl) { saveUpdate(saveEl.dataset.rid); return; }
+  const doneEl = e.target.closest('[data-action="done"]');
+  if (doneEl) { markDone(doneEl.dataset.rid); return; }
+  const photo = e.target.closest('.photo-thumb');
+  if (photo) { openLightbox(photo.dataset.url); return; }
+});
+
+function toggleCard(id) {
+  const r = requests.find(r => String(r.id) === String(id));
+  if (r) r._expanded = !r._expanded;
+  renderAll();
+}
+
+async function saveUpdate(id) {
+  const r = requests.find(r => String(r.id) === String(id));
+  const payload = {
+    action: 'updateRequest', id,
+    status: document.getElementById('edit-status-' + id).value,
+    handler: document.getElementById('edit-handler-' + id).value,
+    amount: document.getElementById('edit-amount-' + id).value,
+    vendor: document.getElementById('edit-vendor-' + id).value,
+    note: document.getElementById('edit-note-' + id).value,
+  };
+  try {
+    await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
+    if (r) { r.status = payload.status; r.handler = payload.handler; r.amount = payload.amount; r.vendor = payload.vendor; r.note = payload.note; }
+    showToast('已儲存');
+    renderAll();
+  } catch(e) { showToast('儲存失敗'); }
+}
+
+async function markDone(id) {
+  const r = requests.find(r => String(r.id) === String(id));
+  const payload = {
+    action: 'updateRequest', id, status: 'done',
+    handler: document.getElementById('edit-handler-' + id)?.value || (r ? r.handler : ''),
+    amount: document.getElementById('edit-amount-' + id)?.value || (r ? r.amount : ''),
+    vendor: document.getElementById('edit-vendor-' + id)?.value || (r ? r.vendor : ''),
+    note: document.getElementById('edit-note-' + id)?.value || (r ? r.note : ''),
+  };
+  try {
+    await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
+    if (r) { r.status = 'done'; r.handler = payload.handler; r.amount = payload.amount; r.vendor = payload.vendor; r.note = payload.note; r._expanded = false; }
+    showToast('✓ 已完成請款');
+    renderAll();
+  } catch(e) { showToast('操作失敗'); }
+}
+
+function openLightbox(url) {
+  document.getElementById('lb-img').src = url;
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox() {
+  document.getElementById('lightbox').classList.remove('open');
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2200);
+}
+</script>
+</body>
+</html>
