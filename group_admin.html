@@ -101,6 +101,24 @@
   .group-title.urgent{color:var(--red);}
   .store-title{font-size:13px;font-weight:700;color:var(--black);padding:8px 4px 0;border-top:1px solid var(--gray-200);margin-top:4px;}
 
+  .config-btn{background:var(--orange);color:var(--white);border:none;border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:14px;}
+  .config-screen{min-height:100vh;background:var(--gray-100);padding:52px 16px 32px;display:none;}
+  .config-card{background:var(--white);border-radius:var(--radius);padding:18px;margin-bottom:12px;}
+  .config-title{font-size:22px;font-weight:700;margin-bottom:6px;}
+  .config-sub{font-size:13px;color:var(--gray-600);line-height:1.5;}
+  .config-row{display:grid;grid-template-columns:1fr;gap:8px;margin-top:12px;}
+  .config-input{width:100%;padding:12px 14px;border:1.5px solid var(--gray-200);border-radius:var(--radius-sm);font-size:14px;font-family:inherit;background:var(--gray-100);color:var(--black);outline:none;}
+  .config-input:focus{border-color:var(--orange);background:var(--white);}
+  .config-add-btn{width:100%;padding:13px;background:var(--black);color:var(--white);border:none;border-radius:var(--radius-sm);font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:10px;}
+  .config-list{display:flex;flex-direction:column;gap:8px;}
+  .config-item{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--gray-100);border-radius:var(--radius-sm);padding:12px;}
+  .config-item-main{min-width:0;}
+  .config-item-brand{font-size:14px;font-weight:700;color:var(--black);}
+  .config-item-store{font-size:12px;color:var(--gray-600);margin-top:2px;}
+  .config-item.off{opacity:0.5;}
+  .config-action{flex-shrink:0;border:none;border-radius:var(--radius-sm);padding:8px 10px;font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;background:var(--red-light);color:var(--red);}
+  .config-action.on{background:var(--green-light);color:var(--green);}
+
 </style>
 </head>
 <body>
@@ -120,8 +138,31 @@
   <div class="brand-select-header">
     <div class="brand-select-title">選擇品牌</div>
     <div class="brand-select-sub">請先選擇品牌，再查看待處理、處理中與已完成單據</div>
+    <button class="config-btn" onclick="showBrandSettings()">品牌／店別設定</button>
   </div>
   <div class="brand-grid" id="brand-grid"></div>
+</div>
+
+<div id="screen-config" class="config-screen">
+  <div class="config-card">
+    <button class="back-brand-btn" onclick="backToBrandSelect()">返回品牌</button>
+    <div class="config-title" style="margin-top:14px;">品牌／店別設定</div>
+    <div class="config-sub">新增、停用或重新啟用品牌與店別。前台與後台都會自動讀取這裡的設定。</div>
+  </div>
+
+  <div class="config-card">
+    <div class="edit-title">新增品牌店別</div>
+    <div class="config-row">
+      <input class="config-input" id="config-brand" placeholder="品牌名稱，例如：品牌A">
+      <input class="config-input" id="config-store" placeholder="店別名稱，例如：店別A01">
+    </div>
+    <button class="config-add-btn" onclick="addBrandStoreFromAdmin()">新增 / 重新啟用</button>
+  </div>
+
+  <div class="config-card">
+    <div class="edit-title">目前品牌店別</div>
+    <div class="config-list" id="config-list"></div>
+  </div>
 </div>
 
 <div id="screen-main" style="display:none;">
@@ -160,11 +201,8 @@
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbx51zVQF-lsk28jlIJJNbaBre5zwiFLiXgxiqbADSTDhk1P6jh3APMr_N6R7btxypQ/exec';
 const CLIENT_ID = '448769511635-rpi3t0vtbqn104d2eut76aq1uqdvataq.apps.googleusercontent.com';
 
-const BRAND_STORE_CONFIG = {
-  "品牌A": ["店別A01", "店別A02", "店別A03"],
-  "品牌B": ["店別B01", "店別B02"],
-  "品牌C": ["店別C01"]
-};
+let BRAND_STORE_CONFIG = {};
+let brandConfigItems = [];
 
 
 let accessToken = null;
@@ -192,10 +230,34 @@ function escapeHtml(value) {
   });
 }
 
-function renderBrandSelect() {
-  const grid = document.getElementById('brand-grid');
+async function loadBrandConfig() {
+  try {
+    const res = await fetch(GAS_URL + '?action=loadBrandConfig');
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || '讀取品牌設定失敗');
+    BRAND_STORE_CONFIG = json.config || {};
+    brandConfigItems = json.items || [];
+    return true;
+  } catch (e) {
+    showToast('品牌設定載入失敗');
+    BRAND_STORE_CONFIG = {};
+    brandConfigItems = [];
+    return false;
+  }
+}
 
-  grid.innerHTML = Object.keys(BRAND_STORE_CONFIG).map(brand => {
+async function renderBrandSelect() {
+  const grid = document.getElementById('brand-grid');
+  grid.innerHTML = '<div class="empty-state">品牌載入中...</div>';
+  await loadBrandConfig();
+
+  const brands = Object.keys(BRAND_STORE_CONFIG);
+  if (brands.length === 0) {
+    grid.innerHTML = '<div class="empty-state">尚未設定品牌／店別，請先到品牌設定新增</div>';
+    return;
+  }
+
+  grid.innerHTML = brands.map(brand => {
     const count = BRAND_STORE_CONFIG[brand].length;
 
     return `
@@ -205,6 +267,80 @@ function renderBrandSelect() {
       </button>
     `;
   }).join('');
+}
+
+async function showBrandSettings() {
+  document.getElementById('screen-brand').style.display = 'none';
+  document.getElementById('screen-main').style.display = 'none';
+  document.getElementById('screen-config').style.display = 'block';
+  await renderBrandConfigList();
+}
+
+async function renderBrandConfigList() {
+  const list = document.getElementById('config-list');
+  list.innerHTML = '<div class="empty-state">載入中...</div>';
+  await loadBrandConfig();
+
+  if (!brandConfigItems.length) {
+    list.innerHTML = '<div class="empty-state">尚無品牌店別</div>';
+    return;
+  }
+
+  list.innerHTML = brandConfigItems.map(item => {
+    const active = item.active === true;
+    return `
+      <div class="config-item ${active ? '' : 'off'}">
+        <div class="config-item-main">
+          <div class="config-item-brand">${escapeHtml(item.brand)}</div>
+          <div class="config-item-store">${escapeHtml(item.store)}｜${active ? '啟用中' : '已停用'}</div>
+        </div>
+        <button class="config-action ${active ? '' : 'on'}" data-action="toggle-brand-store" data-row="${item.row}" data-active="${active ? 'false' : 'true'}">
+          ${active ? '停用' : '啟用'}
+        </button>
+      </div>
+    `;
+  }).join('');
+}
+
+async function addBrandStoreFromAdmin() {
+  const brand = document.getElementById('config-brand').value.trim();
+  const store = document.getElementById('config-store').value.trim();
+
+  if (!brand || !store) {
+    showToast('品牌與店別都要填');
+    return;
+  }
+
+  try {
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'addBrandStore', brand, store })
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || '新增失敗');
+
+    document.getElementById('config-brand').value = '';
+    document.getElementById('config-store').value = '';
+    showToast('已新增');
+    await renderBrandConfigList();
+  } catch (e) {
+    showToast('新增失敗');
+  }
+}
+
+async function toggleBrandStore(row, active) {
+  try {
+    const res = await fetch(GAS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'setBrandStoreActive', row, active })
+    });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || '更新失敗');
+    showToast(active ? '已啟用' : '已停用');
+    await renderBrandConfigList();
+  } catch(e) {
+    showToast('更新失敗');
+  }
 }
 
 function escapeJs(value) {
@@ -224,6 +360,7 @@ function selectBrand(brand) {
 function backToBrandSelect() {
   selectedBrand = '';
   document.getElementById('screen-main').style.display = 'none';
+  document.getElementById('screen-config').style.display = 'none';
   document.getElementById('screen-brand').style.display = 'block';
   renderBrandSelect();
 }
@@ -245,6 +382,7 @@ function enterMain() {
   document.getElementById('screen-login').style.display = 'none';
   document.getElementById('screen-brand').style.display = 'block';
   document.getElementById('screen-main').style.display = 'none';
+  document.getElementById('screen-config').style.display = 'none';
 
   const d = new Date();
   document.getElementById('admin-date').textContent =
@@ -485,8 +623,13 @@ function renderCard(r) {
 document.addEventListener('click', function(e) {
   const brandBtn = e.target.closest('.brand-card');
   if (brandBtn) {
-  selectBrand(brandBtn.dataset.brand);
-  return;
+    selectBrand(brandBtn.dataset.brand);
+    return;
+  }
+  const brandStoreToggle = e.target.closest('[data-action="toggle-brand-store"]');
+  if (brandStoreToggle) {
+    toggleBrandStore(Number(brandStoreToggle.dataset.row), brandStoreToggle.dataset.active === 'true');
+    return;
   }
   const toggleEl = e.target.closest('[data-action="toggle"]');
   if (toggleEl) { toggleCard(toggleEl.dataset.rid); return; }
