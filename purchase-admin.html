@@ -66,6 +66,7 @@
   .detail-label{font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;}
   .detail-value{font-size:13px;font-weight:500;color:var(--black);}
   .photos-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+  .photos-title{font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.08em;margin:4px 0 8px;}
   .photo-thumb{width:80px;height:80px;object-fit:cover;border-radius:var(--radius-sm);cursor:pointer;}
   .edit-section{border-top:1px solid var(--gray-200);padding-top:14px;}
   .edit-title{font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;}
@@ -273,6 +274,10 @@ function renderCard(r) {
     '<img class="photo-thumb" src="' + url + '" data-url="' + url + '" loading="lazy" referrerpolicy="no-referrer">'
   ).join('');
 
+  const completePhotoHtml = r.completePhotoUrl
+    ? '<div class="photos-title">完成照片</div><div class="photos-row"><img class="photo-thumb" src="' + r.completePhotoUrl + '" data-url="' + r.completePhotoUrl + '" loading="lazy" referrerpolicy="no-referrer"></div>'
+    : '';
+
   const isDone = statusClass === 'done';
   const editSection = !isDone ? `
     <div class="edit-section">
@@ -302,11 +307,17 @@ function renderCard(r) {
         <div class="edit-label">備註</div>
         <textarea class="edit-input" id="edit-note-${r.id}" rows="4" placeholder="處理說明">${r.note||''}</textarea>
       </div>
+      ${r.completePhotoUrl ? '<div class="edit-row"><div class="edit-label">已上傳完成照片</div><div class="photos-row"><img class="photo-thumb" src="' + r.completePhotoUrl + '" data-url="' + r.completePhotoUrl + '" loading="lazy" referrerpolicy="no-referrer"></div></div>' : ''}
+      <div class="edit-row">
+        <div class="edit-label">完成照片</div>
+        <input class="edit-input" id="edit-complete-photo-${r.id}" type="file" accept="image/*">
+      </div>
       <div class="action-btns">
         <button class="save-btn" data-action="save" data-rid="${r.id}">儲存更新</button>
         <button class="done-btn" data-action="done" data-rid="${r.id}">✓ 完成請款</button>
       </div>
     </div>` : '<div class="already-done-label">✓ 已完成請款</div>'
+    + completePhotoHtml
     + '<div class="detail-grid" style="margin-top:8px;">'
     + (r.handler ? '<div class="detail-item"><div class="detail-label">處理人員</div><div class="detail-value">' + r.handler + '</div></div>' : '')
     + (r.amount ? '<div class="detail-item"><div class="detail-label">金額</div><div class="detail-value">NT$ ' + r.amount + '</div></div>' : '')
@@ -352,6 +363,15 @@ document.addEventListener('click', function(e) {
   if (photo) { openLightbox(photo.dataset.url); return; }
 });
 
+async function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 function toggleCard(id) {
   const r = requests.find(r => String(r.id) === String(id));
   if (r) r._expanded = !r._expanded;
@@ -360,6 +380,14 @@ function toggleCard(id) {
 
 async function saveUpdate(id) {
   const r = requests.find(r => String(r.id) === String(id));
+  const fileInput = document.getElementById('edit-complete-photo-' + id);
+  let completePhotoBase64 = '';
+
+  if (fileInput && fileInput.files && fileInput.files[0]) {
+    showToast('照片上傳中...');
+    completePhotoBase64 = await fileToBase64(fileInput.files[0]);
+  }
+
   const payload = {
     action: 'updateRequest', id,
     status: document.getElementById('edit-status-' + id).value,
@@ -367,29 +395,60 @@ async function saveUpdate(id) {
     amount: document.getElementById('edit-amount-' + id).value,
     vendor: document.getElementById('edit-vendor-' + id).value,
     note: document.getElementById('edit-note-' + id).value,
+    completePhotoBase64: completePhotoBase64
   };
   try {
-    await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
-    if (r) { r.status = payload.status; r.handler = payload.handler; r.amount = payload.amount; r.vendor = payload.vendor; r.note = payload.note; }
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || '儲存失敗');
+
+    if (r) {
+      r.status = payload.status;
+      r.handler = payload.handler;
+      r.amount = payload.amount;
+      r.vendor = payload.vendor;
+      r.note = payload.note;
+    }
+
     showToast('已儲存');
-    renderAll();
+    loadRequests();
   } catch(e) { showToast('儲存失敗'); }
 }
 
 async function markDone(id) {
   const r = requests.find(r => String(r.id) === String(id));
+  const fileInput = document.getElementById('edit-complete-photo-' + id);
+  let completePhotoBase64 = '';
+
+  if (fileInput && fileInput.files && fileInput.files[0]) {
+    showToast('照片上傳中...');
+    completePhotoBase64 = await fileToBase64(fileInput.files[0]);
+  }
+
   const payload = {
     action: 'updateRequest', id, status: 'done',
     handler: document.getElementById('edit-handler-' + id)?.value || (r ? r.handler : ''),
     amount: document.getElementById('edit-amount-' + id)?.value || (r ? r.amount : ''),
     vendor: document.getElementById('edit-vendor-' + id)?.value || (r ? r.vendor : ''),
     note: document.getElementById('edit-note-' + id)?.value || (r ? r.note : ''),
+    completePhotoBase64: completePhotoBase64
   };
   try {
-    await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
-    if (r) { r.status = 'done'; r.handler = payload.handler; r.amount = payload.amount; r.vendor = payload.vendor; r.note = payload.note; r._expanded = false; }
+    const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
+    const json = await res.json();
+    if (!json.ok) throw new Error(json.error || '操作失敗');
+
+    if (r) {
+      r.status = 'done';
+      r.handler = payload.handler;
+      r.amount = payload.amount;
+      r.vendor = payload.vendor;
+      r.note = payload.note;
+      r._expanded = false;
+    }
+
     showToast('✓ 已完成請款');
-    renderAll();
+    loadRequests();
   } catch(e) { showToast('操作失敗'); }
 }
 
