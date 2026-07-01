@@ -196,7 +196,10 @@ function renderAll() {
   let filtered = requests;
   if (filter === 'purchase') filtered = requests.filter(r => r.type === 'purchase');
   else if (filter === 'repair') filtered = requests.filter(r => r.type === 'repair');
-  else if (filter !== 'all') filtered = requests.filter(r => r.status === filter);
+  else if (filter !== 'all') {
+  const map = { pending: '待處理', processing: '處理中', done: '已完成' };
+  filtered = requests.filter(r => r.status === filter || r.status === map[filter]);
+}
 
   document.getElementById('stat-pending').textContent = requests.filter(r => r.status === 'pending' || r.status === '待處理').length;
   document.getElementById('stat-processing').textContent = requests.filter(r => r.status === 'processing' || r.status === '處理中').length;
