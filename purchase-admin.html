@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#111111">
 <title>元欣 採購/總務後台</title>
-<script src="https://accounts.google.com/gsi/client" async></script>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
   :root{
@@ -21,10 +21,10 @@
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
   body{font-family:'Noto Sans TC',sans-serif;background:var(--gray-100);color:var(--black);min-height:100vh;max-width:480px;margin:0 auto;}
   .login-screen{min-height:100vh;background:var(--black);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 32px;text-align:center;}
-  .brand-dot{width:48px;height:48px;border-radius:50%;background:var(--orange);margin:0 auto 24px;}
+  .brand-dot{width:48px;height:48px;border-radius:50%;background:var(--orange);margin:0 auto 24px;animation:pulse 1.2s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.88);}}
   .login-title{color:var(--white);font-size:22px;font-weight:700;margin-bottom:8px;}
-  .login-sub{color:var(--gray-400);font-size:14px;margin-bottom:40px;}
-  .google-btn{display:inline-flex;align-items:center;gap:10px;background:var(--white);color:var(--black);border:none;border-radius:var(--radius);padding:14px 24px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;}
+  .login-sub{color:var(--gray-400);font-size:14px;}
   .admin-header{background:var(--white);padding:52px 24px 20px;border-bottom:1px solid var(--gray-200);}
   .admin-header-row{display:flex;align-items:flex-start;justify-content:space-between;}
   .admin-title{font-size:22px;font-weight:700;}
@@ -91,14 +91,11 @@
 </head>
 <body>
 
-<div id="screen-login" class="login-screen">
+<!-- LOADING -->
+<div id="screen-loading" class="login-screen">
   <div class="brand-dot"></div>
   <div class="login-title">總務後台</div>
-  <div class="login-sub">請購／維修申請管理</div>
-  <button class="google-btn" onclick="requestLogin()">
-    <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-    使用 Google 帳號登入
-  </button>
+  <div class="login-sub">載入中…</div>
 </div>
 
 <div id="screen-main" style="display:none;">
@@ -135,9 +132,10 @@
 
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzuw4pafQ2asp8X5ijR9v63xZ23IwKJQnzRfoHGaiJsRs3D4P8nsNsV5hyzCia7GBMf/exec';
-const CLIENT_ID = '448769511635-rpi3t0vtbqn104d2eut76aq1uqdvataq.apps.googleusercontent.com';
 
-let accessToken = null;
+// 後台 LIFF ID：建好「第二個 LIFF」後把 ID 填進來（留空也能用電腦瀏覽器直接開）
+const LIFF_ID = '';
+
 let requests = [];
 let filter = 'all';
 
@@ -154,8 +152,16 @@ function cleanDate(d) {
   return s.replace(/-/g, '/');
 }
 
+/* ---------- 啟動：LIFF 容器（不設身份驗證，人人可用） ---------- */
+async function initApp() {
+  if (LIFF_ID && window.liff) {
+    try { await liff.init({ liffId: LIFF_ID }); } catch (e) { /* 從瀏覽器開就略過 */ }
+  }
+  enterMain();
+}
+
 function enterMain() {
-  document.getElementById('screen-login').style.display = 'none';
+  document.getElementById('screen-loading').style.display = 'none';
   document.getElementById('screen-main').style.display = 'block';
   const d = new Date();
   document.getElementById('admin-date').textContent =
@@ -163,58 +169,7 @@ function enterMain() {
   loadRequests();
 }
 
-const REMEMBER_KEY = 'yx_admin_remember_login';
-const REMEMBER_UNTIL_KEY = 'yx_admin_remember_until';
-const REMEMBER_DAYS = 365;
-
-function rememberThisDevice() {
-  const until = Date.now() + REMEMBER_DAYS * 24 * 60 * 60 * 1000;
-  localStorage.setItem(REMEMBER_KEY, '1');
-  localStorage.setItem(REMEMBER_UNTIL_KEY, String(until));
-}
-
-function isDeviceRemembered() {
-  const remembered = localStorage.getItem(REMEMBER_KEY) === '1';
-  const until = Number(localStorage.getItem(REMEMBER_UNTIL_KEY) || '0');
-  return remembered && until > Date.now();
-}
-
-function clearRememberedDevice() {
-  localStorage.removeItem(REMEMBER_KEY);
-  localStorage.removeItem(REMEMBER_UNTIL_KEY);
-}
-
-function initGoogleAuth() {
-  // 主畫面 App / PWA 模式下，Google 靜默登入常常不穩定。
-  // 因此這裡改成：這台設備已記住且未過期，就直接進後台。
-  if (isDeviceRemembered()) {
-    enterMain();
-    return;
-  }
-
-  clearRememberedDevice();
-
-  const client = google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/userinfo.profile',
-    callback: (resp) => {
-      if (resp.error) { showToast('登入失敗'); return; }
-      accessToken = resp.access_token;
-      rememberThisDevice();
-      enterMain();
-    },
-  });
-  window._tokenClient = client;
-}
-
-function requestLogin() {
-  if (window._tokenClient) window._tokenClient.requestAccessToken({ prompt: 'consent' });
-}
-
-window.addEventListener('load', () => {
-  if (window.google) initGoogleAuth();
-  else document.querySelector('script[src*="gsi"]').addEventListener('load', initGoogleAuth);
-});
+window.addEventListener('load', initApp);
 
 async function loadRequests() {
   document.getElementById('cards-list').innerHTML = '<div class="empty-state">載入中...</div>';
