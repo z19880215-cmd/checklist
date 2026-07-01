@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="theme-color" content="#111111">
 <title>元欣-請購／維修</title>
-<script src="https://accounts.google.com/gsi/client" async></script>
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
   :root{
@@ -20,12 +20,12 @@
   *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
   body{font-family:'Noto Sans TC',sans-serif;background:var(--gray-100);color:var(--black);min-height:100vh;max-width:480px;margin:0 auto;}
 
-  /* LOGIN */
+  /* LOADING */
   .login-screen{min-height:100vh;background:var(--black);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 32px;text-align:center;}
-  .brand-dot{width:48px;height:48px;border-radius:50%;background:var(--orange);margin:0 auto 24px;}
+  .brand-dot{width:48px;height:48px;border-radius:50%;background:var(--orange);margin:0 auto 24px;animation:pulse 1.2s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.5;transform:scale(.88);}}
   .login-title{color:var(--white);font-size:22px;font-weight:700;margin-bottom:8px;}
-  .login-sub{color:var(--gray-400);font-size:14px;margin-bottom:40px;}
-  .google-btn{display:inline-flex;align-items:center;gap:10px;background:var(--white);color:var(--black);border:none;border-radius:var(--radius);padding:14px 24px;font-size:14px;font-weight:700;font-family:inherit;cursor:pointer;}
+  .login-sub{color:var(--gray-400);font-size:14px;}
 
   /* HEADER */
   .app-header{background:var(--black);padding:52px 24px 24px;}
@@ -89,6 +89,7 @@
   .done-title{color:var(--white);font-size:24px;font-weight:700;margin-bottom:10px;}
   .done-sub{color:var(--gray-400);font-size:14px;line-height:1.6;margin-bottom:40px;}
   .done-back-btn{background:var(--white);color:var(--black);border:none;border-radius:var(--radius);padding:14px 40px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;}
+  .done-close-btn{background:transparent;color:var(--gray-400);border:1.5px solid var(--gray-600);border-radius:var(--radius);padding:13px 40px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:12px;}
 
   /* TOAST */
   .toast{position:fixed;bottom:32px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--black);color:var(--white);padding:12px 24px;border-radius:100px;font-size:13px;font-weight:500;transition:transform 0.3s cubic-bezier(0.34,1.56,0.64,1);z-index:999;white-space:nowrap;}
@@ -97,15 +98,11 @@
 </head>
 <body>
 
-<!-- LOGIN -->
-<div id="screen-login" class="login-screen">
+<!-- LOADING -->
+<div id="screen-loading" class="login-screen">
   <div class="brand-dot"></div>
   <div class="login-title">請購／維修申請</div>
-  <div class="login-sub">請先登入 Google 帳號</div>
-  <button class="google-btn" onclick="requestLogin()">
-    <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-    使用 Google 帳號登入
-  </button>
+  <div class="login-sub">載入中…</div>
 </div>
 
 <!-- FORM -->
@@ -225,121 +222,75 @@
   <div class="done-title">申請已送出</div>
   <div class="done-sub" id="done-sub">總務將收到通知並處理</div>
   <button class="done-back-btn" onclick="resetForm()">再送一筆</button>
+  <button id="done-close-btn" class="done-close-btn" style="display:none;" onclick="closeLiff()">關閉視窗</button>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzuw4pafQ2asp8X5ijR9v63xZ23IwKJQnzRfoHGaiJsRs3D4P8nsNsV5hyzCia7GBMf/exec';
-const CLIENT_ID = '448769511635-rpi3t0vtbqn104d2eut76aq1uqdvataq.apps.googleusercontent.com';
+const LIFF_ID = '2009997410-2c7aWhLd';
 
-let accessToken = null;
-let currentUser = null;
+let currentUser = null;   // { name, lineUserId }
+let isInLine = false;
 let formType = null;
 let isUrgent = false;
 let photoFiles = [];
 
-const REMEMBER_KEY = 'yx_request_remember_login';
-const REMEMBER_UNTIL_KEY = 'yx_request_remember_until';
-const REMEMBER_NAME_KEY = 'yx_request_user_name';
-const REMEMBER_EMAIL_KEY = 'yx_request_user_email';
-const REMEMBER_DAYS = 365;
-
-function rememberThisDevice(user) {
-  const until = Date.now() + REMEMBER_DAYS * 24 * 60 * 60 * 1000;
-  localStorage.setItem(REMEMBER_KEY, '1');
-  localStorage.setItem(REMEMBER_UNTIL_KEY, String(until));
-  localStorage.setItem(REMEMBER_NAME_KEY, user?.name || '');
-  localStorage.setItem(REMEMBER_EMAIL_KEY, user?.email || '');
-}
-
-function isDeviceRemembered() {
-  const remembered = localStorage.getItem(REMEMBER_KEY) === '1';
-  const until = Number(localStorage.getItem(REMEMBER_UNTIL_KEY) || '0');
-  return remembered && until > Date.now();
-}
-
-function clearRememberedDevice() {
-  localStorage.removeItem(REMEMBER_KEY);
-  localStorage.removeItem(REMEMBER_UNTIL_KEY);
-  localStorage.removeItem(REMEMBER_NAME_KEY);
-  localStorage.removeItem(REMEMBER_EMAIL_KEY);
+/* ---------- 啟動：LIFF 認人 or 瀏覽器手動 ---------- */
+async function initApp() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (liff.isInClient()) {
+      isInLine = true;
+      try {
+        const profile = await liff.getProfile();
+        currentUser = {
+          name: profile.displayName || '',
+          lineUserId: profile.userId || ''
+        };
+      } catch (e) {
+        // 取 profile 失敗，仍為 LINE 模式，只是不預帶名字
+      }
+    }
+  } catch (e) {
+    // LIFF 初始化失敗（多半是從瀏覽器直接開）→ 走手動輸入模式
+    isInLine = false;
+  }
+  enterForm();
 }
 
 function enterForm() {
-  document.getElementById('screen-login').style.display = 'none';
+  document.getElementById('screen-loading').style.display = 'none';
   document.getElementById('screen-form').style.display = 'block';
 
   const displayName = currentUser && currentUser.name ? currentUser.name : '';
   document.getElementById('header-user-info').textContent =
     (displayName ? displayName + '・' : '') + '選擇申請類型';
 
-  if (displayName && !document.getElementById('field-name').value) {
+  // LINE 模式：預帶名字（仍可自行修改）；瀏覽器模式：留空自己填
+  if (displayName) {
     document.getElementById('field-name').value = displayName;
   }
 
   document.getElementById('field-date').value = new Date().toISOString().split('T')[0];
   selectUrgent(false);
-}
-
-async function finishLogin(resp) {
-  accessToken = resp.access_token;
-
-  const info = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-    headers: { Authorization: 'Bearer ' + accessToken }
-  }).then(r => r.json());
-
-  currentUser = { name: info.name, email: info.email };
-  rememberThisDevice(currentUser);
-  enterForm();
-}
-
-function initGoogleAuth() {
-  if (isDeviceRemembered()) {
-    currentUser = {
-      name: localStorage.getItem(REMEMBER_NAME_KEY) || '',
-      email: localStorage.getItem(REMEMBER_EMAIL_KEY) || ''
-    };
-    enterForm();
-    return;
-  }
-
-  clearRememberedDevice();
-
-  const client = google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
-    callback: async (resp) => {
-      if (resp.error) {
-        showToast('登入失敗');
-        return;
-      }
-
-      try {
-        await finishLogin(resp);
-      } catch(e) {
-        showToast('登入失敗');
-      }
-    },
-  });
-
-  window._tokenClient = client;
-}
-
-function requestLogin() {
-  if (window._tokenClient) {
-    window._tokenClient.requestAccessToken({ prompt: 'consent' });
-  }
+  checkReady();
 }
 
 window.addEventListener('load', () => {
-  if (window.google) {
-    initGoogleAuth();
+  if (window.liff) {
+    initApp();
   } else {
-    document.querySelector('script[src*="gsi"]').addEventListener('load', initGoogleAuth);
+    // SDK 尚未載入完成時的保險
+    const t = setInterval(() => {
+      if (window.liff) { clearInterval(t); initApp(); }
+    }, 50);
+    setTimeout(() => { clearInterval(t); if (!currentUser) enterForm(); }, 3000);
   }
 });
 
+/* ---------- 表單邏輯 ---------- */
 function selectType(type) {
   formType = type;
 
@@ -482,7 +433,10 @@ async function submitForm() {
       reason: formType === 'purchase'
         ? document.getElementById('field-reason').value.trim()
         : document.getElementById('field-situation').value.trim(),
-      photos: photos
+      photos: photos,
+      // LINE 身分（瀏覽器模式為空字串，GAS 未更新則無害忽略）
+      lineUserId: currentUser && currentUser.lineUserId ? currentUser.lineUserId : '',
+      source: isInLine ? 'LINE' : 'WEB'
     };
 
     const res = await fetch(GAS_URL, {
@@ -500,10 +454,14 @@ async function submitForm() {
     doneEl.textContent =
       (formType === 'purchase' ? '請購' : '維修') + '申請已送出，總務將收到通知';
 
+    // LINE 模式才顯示「關閉視窗」
+    document.getElementById('done-close-btn').style.display =
+      isInLine ? 'inline-block' : 'none';
+
     document.getElementById('screen-form').style.display = 'none';
     document.getElementById('screen-done').style.display = 'flex';
 
-  } catch(e) {
+  } catch (e) {
     showToast('送出失敗，請重試');
     btn.disabled = false;
     btn.textContent = '送出申請';
@@ -539,6 +497,12 @@ function resetForm() {
   document.getElementById('screen-form').style.display = 'block';
 }
 
+function closeLiff() {
+  if (window.liff && liff.isInClient()) {
+    liff.closeWindow();
+  }
+}
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -546,3 +510,5 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2200);
 }
 </script>
+</body>
+</html>
