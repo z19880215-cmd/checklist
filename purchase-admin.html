@@ -134,7 +134,7 @@
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbzuw4pafQ2asp8X5ijR9v63xZ23IwKJQnzRfoHGaiJsRs3D4P8nsNsV5hyzCia7GBMf/exec';
 
 // 後台 LIFF ID：建好「第二個 LIFF」後把 ID 填進來（留空也能用電腦瀏覽器直接開）
-const LIFF_ID = '2010566289-NMYVup5x';
+const LIFF_ID = '';
 
 let requests = [];
 let filter = 'all';
@@ -197,9 +197,9 @@ function renderAll() {
   if (filter === 'purchase') filtered = requests.filter(r => r.type === 'purchase');
   else if (filter === 'repair') filtered = requests.filter(r => r.type === 'repair');
   else if (filter !== 'all') {
-  const map = { pending: '待處理', processing: '處理中', done: '已完成' };
-  filtered = requests.filter(r => r.status === filter || r.status === map[filter]);
-}
+    const map = { pending: '待處理', processing: '處理中', done: '已完成' };
+    filtered = requests.filter(r => r.status === filter || r.status === map[filter]);
+  }
 
   document.getElementById('stat-pending').textContent = requests.filter(r => r.status === 'pending' || r.status === '待處理').length;
   document.getElementById('stat-processing').textContent = requests.filter(r => r.status === 'processing' || r.status === '處理中').length;
@@ -232,8 +232,14 @@ function renderCard(r) {
     '<img class="photo-thumb" src="' + url + '" data-url="' + url + '" loading="lazy" referrerpolicy="no-referrer">'
   ).join('');
 
-  const completePhotoHtml = r.completePhotoUrl
-    ? '<div class="photos-title">完成照片</div><div class="photos-row"><img class="photo-thumb" src="' + r.completePhotoUrl + '" data-url="' + r.completePhotoUrl + '" loading="lazy" referrerpolicy="no-referrer"></div>'
+  const completeUrls = (r.completePhotoUrls && r.completePhotoUrls.length)
+    ? r.completePhotoUrls
+    : (r.completePhotoUrl ? [r.completePhotoUrl] : []);
+  const completeThumbs = completeUrls.map(url =>
+    '<img class="photo-thumb" src="' + url + '" data-url="' + url + '" loading="lazy" referrerpolicy="no-referrer">'
+  ).join('');
+  const completePhotoHtml = completeThumbs
+    ? '<div class="photos-title">完成照片</div><div class="photos-row">' + completeThumbs + '</div>'
     : '';
 
   const isDone = statusClass === 'done';
@@ -265,10 +271,10 @@ function renderCard(r) {
         <div class="edit-label">備註</div>
         <textarea class="edit-input" id="edit-note-${r.id}" rows="4" placeholder="處理說明">${r.note||''}</textarea>
       </div>
-      ${r.completePhotoUrl ? '<div class="edit-row"><div class="edit-label">已上傳完成照片</div><div class="photos-row"><img class="photo-thumb" src="' + r.completePhotoUrl + '" data-url="' + r.completePhotoUrl + '" loading="lazy" referrerpolicy="no-referrer"></div></div>' : ''}
+      ${completeThumbs ? '<div class="edit-row"><div class="edit-label">已上傳完成照片</div><div class="photos-row">' + completeThumbs + '</div></div>' : ''}
       <div class="edit-row">
-        <div class="edit-label">完成照片</div>
-        <input class="edit-input" id="edit-complete-photo-${r.id}" type="file" accept="image/*">
+        <div class="edit-label">完成照片（可多張，最多 10 張）</div>
+        <input class="edit-input" id="edit-complete-photo-${r.id}" type="file" accept="image/*" multiple>
       </div>
       <div class="action-btns">
         <button class="save-btn" data-action="save" data-rid="${r.id}">儲存更新</button>
@@ -330,6 +336,20 @@ async function fileToBase64(file) {
   });
 }
 
+// 讀取「完成照片」input 選取的多張檔案 → dataURL 陣列（最多 10 張）
+async function readCompletePhotos(id) {
+  const fileInput = document.getElementById('edit-complete-photo-' + id);
+  const out = [];
+  if (fileInput && fileInput.files && fileInput.files.length) {
+    const files = Array.from(fileInput.files).slice(0, 10);
+    for (let i = 0; i < files.length; i++) {
+      showToast('照片上傳中 ' + (i + 1) + '/' + files.length + '...');
+      out.push(await fileToBase64(files[i]));
+    }
+  }
+  return out;
+}
+
 function toggleCard(id) {
   const r = requests.find(r => String(r.id) === String(id));
   if (r) r._expanded = !r._expanded;
@@ -338,13 +358,7 @@ function toggleCard(id) {
 
 async function saveUpdate(id) {
   const r = requests.find(r => String(r.id) === String(id));
-  const fileInput = document.getElementById('edit-complete-photo-' + id);
-  let completePhotoBase64 = '';
-
-  if (fileInput && fileInput.files && fileInput.files[0]) {
-    showToast('照片上傳中...');
-    completePhotoBase64 = await fileToBase64(fileInput.files[0]);
-  }
+  const completePhotos = await readCompletePhotos(id);
 
   const payload = {
     action: 'updateRequest', id,
@@ -353,7 +367,7 @@ async function saveUpdate(id) {
     amount: document.getElementById('edit-amount-' + id).value,
     vendor: document.getElementById('edit-vendor-' + id).value,
     note: document.getElementById('edit-note-' + id).value,
-    completePhotoBase64: completePhotoBase64
+    completePhotos: completePhotos
   };
   try {
     const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
@@ -375,13 +389,7 @@ async function saveUpdate(id) {
 
 async function markDone(id) {
   const r = requests.find(r => String(r.id) === String(id));
-  const fileInput = document.getElementById('edit-complete-photo-' + id);
-  let completePhotoBase64 = '';
-
-  if (fileInput && fileInput.files && fileInput.files[0]) {
-    showToast('照片上傳中...');
-    completePhotoBase64 = await fileToBase64(fileInput.files[0]);
-  }
+  const completePhotos = await readCompletePhotos(id);
 
   const payload = {
     action: 'updateRequest', id, status: 'done',
@@ -389,7 +397,7 @@ async function markDone(id) {
     amount: document.getElementById('edit-amount-' + id)?.value || (r ? r.amount : ''),
     vendor: document.getElementById('edit-vendor-' + id)?.value || (r ? r.vendor : ''),
     note: document.getElementById('edit-note-' + id)?.value || (r ? r.note : ''),
-    completePhotoBase64: completePhotoBase64
+    completePhotos: completePhotos
   };
   try {
     const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify(payload) });
